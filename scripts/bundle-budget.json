@@ -1,0 +1,20 @@
+{
+	"file": "main.js",
+	"maxBytes": 4268062,
+	"note": "maxBytes is the 2.3.3 production main.js size (DESIGN §13.3: after LangChain is removed in P5.2, main.js must be <= its 2.3.3 size). Checked by `pnpm check:bundle`.",
+	"baseline": {
+		"version": "2.3.3",
+		"commit": "fb05c7d",
+		"bytes": 4268062,
+		"build": "pnpm build (production), esbuild 0.17.3, target es2018",
+		"measured": "2026-10-23"
+	},
+	"measurements": [
+		{
+			"phase": "P0.3",
+			"bytes": 3936364,
+			"build": "pnpm build (production), esbuild 0.25.2, target es2022",
+			"measured": "2026-10-23"
+		}
+	]
+}
