@@ -123,3 +123,72 @@ describe("cannoliData reaches the factory", () => {
     expect(prompt?.cannoliData.text).toBe("RESUMED FROM CANNOLIDATA");
   });
 });
+
+describe("stale cannoliData from the file", () => {
+  const threeNode = () => ({
+    nodes: [
+      { id: "prompt", type: "text", text: "Say hi", color: "6", ...base },
+      { id: "call", type: "text", text: "", ...base },
+      { id: "output", type: "text", text: "", color: "6", ...base },
+    ] as Record<string, unknown>[],
+    edges: [
+      { id: "e1", fromNode: "prompt", fromSide: "right", toNode: "call", toSide: "left" },
+      { id: "e2", fromNode: "call", fromSide: "right", toNode: "output", toSide: "left" },
+    ] as Record<string, unknown>[],
+  });
+
+  // Compile once and write each object's cannoliData back onto the canvas, as a
+  // previous run would leave it in the file.
+  const withStaleData = () => {
+    const canvas = threeNode();
+    const compiled = compileCanvas(canvas);
+    for (const n of canvas.nodes)
+      n.cannoliData = structuredClone(compiled.nodes.find((c) => c.id === n.id)!.cannoliData);
+    for (const e of canvas.edges)
+      e.cannoliData = structuredClone(compiled.edges.find((c) => c.id === e.id)!.cannoliData);
+    return canvas;
+  };
+
+  it("red node with stale cannoliData is dropped when not resuming", () => {
+    const canvas = withStaleData();
+    for (const o of [...canvas.nodes, ...canvas.edges])
+      if (["call", "e1", "e2"].includes(o.id as string)) o.color = "1";
+    const out = compileCanvas(canvas, { resume: false });
+    const ids = [...out.nodes, ...out.edges].map((o) => o.id);
+    for (const id of ["call", "e1", "e2"]) expect(ids).not.toContain(id);
+    // Same result as compiling the recoloured canvas with no cached data at all.
+    const fresh = structuredClone(canvas);
+    for (const o of [...fresh.nodes, ...fresh.edges]) delete o.cannoliData;
+    expect(out).toEqual(compileCanvas(fresh, { resume: false }));
+  });
+
+  it("red edge with stale cannoliData is dropped when not resuming", () => {
+    const canvas = withStaleData();
+    canvas.edges.find((e) => e.id === "e2")!.color = "1";
+    const out = compileCanvas(canvas, { resume: false });
+    expect(out.edges.map((e) => e.id)).not.toContain("e2");
+    const fresh = structuredClone(canvas);
+    for (const o of [...fresh.nodes, ...fresh.edges]) delete o.cannoliData;
+    expect(out).toEqual(compileCanvas(fresh, { resume: false }));
+  });
+});
+
+describe("top-level fields do not steer compilation", () => {
+  it('top-level "kind" key on a node does not change edge type', () => {
+    const canvas = {
+      nodes: [
+        { id: "prompt", type: "text", text: "Say hi", color: "6", ...base },
+        { id: "call", type: "text", text: "", ...base },
+      ] as Record<string, unknown>[],
+      edges: [
+        { id: "e1", fromNode: "prompt", fromSide: "right", toNode: "call", toSide: "left" },
+      ],
+    };
+    const baseline = compileCanvas(canvas).edges[0].cannoliData?.type;
+    expect(baseline).not.toBe("chat");
+
+    const tagged = structuredClone(canvas);
+    tagged.nodes[0].kind = "group";
+    expect(compileCanvas(tagged).edges[0].cannoliData?.type).toBe(baseline);
+  });
+});
