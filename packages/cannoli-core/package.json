@@ -20,7 +20,9 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --treeshake --clean",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit --project test",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -33,7 +35,8 @@
     "@typescript-eslint/parser": "^7.7.1",
     "builtin-modules": "3.3.0",
     "eslint": "^8.57.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@arizeai/openinference-semantic-conventions": "1.1.0",
