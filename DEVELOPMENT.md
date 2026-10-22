@@ -62,6 +62,23 @@ pnpm run dev
 # so you can make a change to a file, save it, and see it appear in obsidian in typically less than one second
 ```
 
+### Checks
+
+```bash
+pnpm test          # unit and golden tests (vitest, via turbo)
+pnpm typecheck
+pnpm build         # production build; writes main.js at the repo root
+pnpm check:bundle  # fails if main.js is bigger than scripts/bundle-budget.json allows
+pnpm test:bundle   # tests for the bundle check itself (node --test; needs a build)
+```
+
+The bundle budget is the 2.3.3 `main.js` size. Change `maxBytes` in
+`scripts/bundle-budget.json` only on purpose, and add a `measurements` entry when you do.
+
+`packages/cannoli-core/test/browser-safe.test.ts` bundles core for the browser (Obsidian
+mobile has no Node) and lists any Node built-in imports or Node-only globals (`Buffer`,
+`process`, ...). Its cases are marked `it.fails` while known uses remain.
+
 ## Deploying a new version of cannoli-server
 
 ```bash
