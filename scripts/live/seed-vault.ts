@@ -84,6 +84,16 @@ const canvases: Record<string, { nodes: Node[]; edges: Edge[] }> = {
     edges: [edge("e1", "topic", "call", "topic"), edge("e2", "call", "output")],
   },
 };
+// (P0.2) a node carrying the engine's `cannoli` metadata field; checks whether Obsidian keeps it on edit.
+// Expectations: scripts/live/expect/meta-preserve.json.
+canvases["Smoke/meta.canvas"] = {
+  nodes: [
+    Object.assign(node("probe", "meta probe", 0, 0, "6"), {
+      cannoli: { v: 1, probe: "x" },
+    }),
+  ],
+  edges: [],
+};
 for (const [path, data] of Object.entries(canvases))
   await Bun.write(join(vault, path), JSON.stringify(data, null, "\t"));
 
