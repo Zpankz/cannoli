@@ -14,6 +14,10 @@
 			"dependsOn": ["^build"]
 		},
 		"typecheck": {},
+		"test": {
+			"dependsOn": ["^build"],
+			"outputs": []
+		},
 		"release": {
 			"cache": false,
 			"dependsOn": ["^build"]
