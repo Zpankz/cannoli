@@ -72,6 +72,8 @@ pnpm check:bundle  # fails if main.js is bigger than scripts/bundle-budget.json 
 pnpm test:bundle   # tests for the bundle check itself (node --test; needs a build)
 ```
 
+Known issue: obsidian 1.14.4 typings want `@codemirror/state` 6.7.6 / `@codemirror/view` 6.43.13 while the lockfile has 6.4.1 / 6.26.3 — a types-only peer mismatch, no action needed.
+
 The bundle budget is the 2.3.3 `main.js` size. Change `maxBytes` in
 `scripts/bundle-budget.json` only on purpose, and add a `measurements` entry when you do.
 
