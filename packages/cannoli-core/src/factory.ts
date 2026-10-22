@@ -1111,10 +1111,10 @@ export class CannoliFactory {
         throw new Error(`Edge: ${edge.label} source or target not found`);
       }
 
+      // Canvas nodes have no top-level `kind` (it lives in cannoliData), so this
+      // check never matches today; kept as-is to preserve behaviour.
       if (
-        // @ts-expect-error: kind is not a property of CannoliCanvasGroupData
         sourceNode.kind === CannoliObjectKind.Group ||
-        // @ts-expect-error: kind is not a property of CannoliCanvasGroupData
         targetNode.kind === CannoliObjectKind.Group
       ) {
         return EdgeType.Chat;

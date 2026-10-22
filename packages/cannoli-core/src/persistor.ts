@@ -24,6 +24,34 @@ export const canvasColorSchema = z.union([
 
 export type CanvasColor = z.infer<typeof canvasColorSchema>;
 
+/**
+ * Engine-written cache on a node or edge (DESIGN §3.5). Never needed for semantics:
+ * node text stays authoritative, and the field is rebuilt on the next run. No prompts,
+ * outputs or secrets go here. Unknown sub-keys are kept so newer engines can add fields.
+ */
+export const cannoliMetaSchema = z
+  .object({
+    v: z.number(),
+    kind: z.string().optional(),
+    specHash: z.string().optional(),
+    last: z
+      .object({
+        runId: z.string().optional(),
+        status: z.string().optional(),
+        tokens: z.number().optional(),
+        costUsd: z.number().optional(),
+        at: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+export type CannoliMeta = z.infer<typeof cannoliMetaSchema>;
+
+// A malformed cache is dropped rather than failing the whole parse.
+const cannoliMetaField = cannoliMetaSchema.optional().catch(undefined);
+
 const canvasNodeDataSchema = z
   .object({
     id: z.string(),
@@ -34,6 +62,7 @@ const canvasNodeDataSchema = z
     color: z.string().optional(),
     text: z.string().optional(),
     type: z.string(),
+    cannoli: cannoliMetaField,
   })
   .passthrough();
 
@@ -47,7 +76,7 @@ export const canvasFileDataSchema = canvasNodeDataSchema.merge(
     file: z.string(),
     subpath: z.string().optional(),
   }),
-);
+).passthrough();
 
 export type CanvasFileData = z.infer<typeof canvasFileDataSchema>;
 
@@ -56,7 +85,7 @@ const canvasTextDataSchema = canvasNodeDataSchema.merge(
     type: z.literal("text"),
     text: z.string(),
   }),
-);
+).passthrough();
 
 export type CanvasTextData = z.infer<typeof canvasTextDataSchema>;
 
@@ -65,7 +94,7 @@ export const canvasLinkDataSchema = canvasNodeDataSchema.merge(
     type: z.literal("link"),
     url: z.string(),
   }),
-);
+).passthrough();
 
 export type CanvasLinkData = z.infer<typeof canvasLinkDataSchema>;
 
@@ -81,7 +110,7 @@ export const canvasGroupDataSchema = canvasNodeDataSchema.merge(
       .union([z.literal("cover"), z.literal("ratio"), z.literal("repeat")])
       .optional(),
   }),
-);
+).passthrough();
 
 export type CanvasGroupData = z.infer<typeof canvasGroupDataSchema>;
 
@@ -118,6 +147,7 @@ export const canvasEdgeDataSchema = z
     toEnd: edgeEndSchema.optional(),
     color: z.string().optional(),
     label: z.string().optional(),
+    cannoli: cannoliMetaField,
   })
   .passthrough();
 
