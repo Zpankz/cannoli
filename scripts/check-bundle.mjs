@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fails if the built plugin bundle (main.js at the repo root) is bigger than the budget in
 // scripts/bundle-budget.json. Usage: `pnpm build && pnpm check:bundle` (DESIGN §13.3).
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,7 +40,7 @@ export function checkBundle({ bundlePath, budgetPath = defaultBudgetPath } = {})
 	return evaluate(statSync(file).size, budget);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	const result = checkBundle();
 	console.log(`${result.ok ? "check-bundle OK" : "check-bundle FAIL"}: ${result.message}`);
 	process.exit(result.ok ? 0 : 1);

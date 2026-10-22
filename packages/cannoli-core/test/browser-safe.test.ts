@@ -5,7 +5,7 @@
 import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build, type Plugin } from "esbuild";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 const coreRoot = fileURLToPath(new URL("..", import.meta.url));
 const NODE_GLOBALS = ["Buffer", "process", "__dirname", "__filename", "global"];
@@ -69,27 +69,74 @@ async function nodeUsage(opts: { includeDependencies: boolean }) {
 }
 
 describe("browser-safe", () => {
-  // Fails today: CallNode.ts uses Buffer. P0.4 adds util/base64.ts and flips this to `it`.
-  it.fails(
-    "core bundles for platform=browser with no node builtins",
-    async () => {
-      const { findings, inputs } = await nodeUsage({ includeDependencies: false });
-      // Guard against a silent pass: core's own sources must actually be bundled.
-      expect(inputs).toContain("src/run.ts");
-      expect(inputs.filter((p) => p.startsWith("src/")).length).toBeGreaterThan(30);
-      expect(findings).toEqual([]);
-    },
-    60_000,
-  );
+  describe("core only", () => {
+    let result: Awaited<ReturnType<typeof nodeUsage>> | undefined;
+    let buildError: unknown;
 
-  // Third-party code (LangChain, OpenTelemetry, ...) still pulls in Buffer, process
-  // and `path`. Flip to `it` once those dependencies are gone (P5.2).
-  it.fails(
-    "core bundle including dependencies has no node builtins",
-    async () => {
-      const { findings } = await nodeUsage({ includeDependencies: true });
-      expect(findings).toEqual([]);
-    },
-    120_000,
-  );
+    beforeAll(async () => {
+      try {
+        result = await nodeUsage({ includeDependencies: false });
+      } catch (e) {
+        buildError = e;
+      }
+    }, 60_000);
+
+    it("builds successfully", () => {
+      expect(buildError).toBeUndefined();
+      expect(result).toBeDefined();
+    });
+
+    it("bundles core sources", () => {
+      expect(result!.inputs).toContain("src/run.ts");
+      expect(result!.inputs.filter((p) => p.startsWith("src/")).length).toBeGreaterThan(30);
+    });
+
+    it("finds exactly the known CallNode Buffer use", () => {
+      expect(result!.findings).toEqual([
+        "global Buffer in src/graph/objects/vertices/nodes/CallNode.ts",
+      ]);
+    });
+
+    // Fails today: CallNode.ts uses Buffer. P0.4 adds util/base64.ts and flips this to `it`.
+    it.fails("has no node builtins", () => {
+      expect(result!.findings).toEqual([]);
+    });
+  });
+
+  describe("including dependencies", () => {
+    let result: Awaited<ReturnType<typeof nodeUsage>> | undefined;
+    let buildError: unknown;
+
+    beforeAll(async () => {
+      try {
+        result = await nodeUsage({ includeDependencies: true });
+      } catch (e) {
+        buildError = e;
+      }
+    }, 120_000);
+
+    it("builds successfully", () => {
+      expect(buildError).toBeUndefined();
+      expect(result).toBeDefined();
+    });
+
+    it("bundles core and dependency sources", () => {
+      expect(result!.inputs).toContain("src/run.ts");
+      expect(result!.inputs.length).toBeGreaterThan(500);
+    });
+
+    it("finds the known CallNode Buffer use", () => {
+      expect(result!.findings).toContain(
+        "global Buffer in src/graph/objects/vertices/nodes/CallNode.ts",
+      );
+    });
+
+    // Third-party code still pulls in Buffer, process, `global` and `path` even after
+    // LangChain is gone (e.g. ollama, tiny-invariant, semver, whatwg-fetch, protobufjs,
+    // @opentelemetry). This case stays expected-fail until an allowlist of
+    // `typeof`-guarded references is added; don't flip it when dependencies change.
+    it.fails("has no node builtins", () => {
+      expect(result!.findings).toEqual([]);
+    });
+  });
 });
