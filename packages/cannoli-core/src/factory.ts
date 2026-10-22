@@ -138,6 +138,15 @@ export class CannoliFactory {
   }
 
   getCannoliData(): VerifiedCannoliCanvasData {
+    // cannoliData read from the file is a leftover from an earlier run. Unless we
+    // are resuming, drop it so only data built below counts (otherwise red or
+    // untyped objects would keep it and survive the filter further down).
+    if (!this.resume) {
+      for (const obj of [...this.cannoliData.nodes, ...this.cannoliData.edges]) {
+        delete obj.cannoliData;
+      }
+    }
+
     // Check if there are any groups with the label "cannoli"
     const allGroups = this.cannoliData.nodes.filter(
       (node) => node.type === "group",
@@ -1111,14 +1120,12 @@ export class CannoliFactory {
         throw new Error(`Edge: ${edge.label} source or target not found`);
       }
 
-      // Canvas nodes have no top-level `kind` (it lives in cannoliData), so this
-      // check never matches today; kept as-is to preserve behaviour.
-      if (
-        sourceNode.kind === CannoliObjectKind.Group ||
-        targetNode.kind === CannoliObjectKind.Group
-      ) {
-        return EdgeType.Chat;
-      }
+      // Upstream once returned Chat here when either end was a group, but it read
+      // a top-level `kind` field that canvas nodes never have (kind lives in
+      // cannoliData), so it never fired. It is removed rather than fixed: with
+      // unknown fields now kept, a stray `"kind": "group"` in the file would
+      // start firing it, and reading cannoliData.kind instead would turn blank
+      // edges into or out of groups (today system-message / write) into chat.
 
       const sourceIndicatedType = this.getNodeIndicatedType(
         sourceNode as
