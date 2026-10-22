@@ -1,0 +1,12 @@
+{
+  "canvas": "Smoke/meta.canvas",
+  "description": "P0.2: after a user-style move + text edit through the Obsidian canvas view, the node keeps its unknown `cannoli` field (DESIGN §3.5; the field is a cache, so a drop is a finding, not a failure of semantics).",
+  "edit": { "node": "probe", "moveBy": { "x": 120, "y": 80 }, "setText": "meta probe (edited)" },
+  "nodes": [
+    {
+      "node": "probe",
+      "textMatches": "^meta probe \\(edited\\)$",
+      "fields": { "cannoli.v": 1, "cannoli.probe": "x" }
+    }
+  ]
+}
