@@ -85,7 +85,9 @@ it("red nodes and edges are ignored", () => {
       textNode("in", "Say hi", "6"),
       textNode("call", ""),
       textNode("out", "", "6"),
-      textNode("redNode", "ignored call", "1"),
+      // Floating format, so only the red check drops it: an uncoloured
+      // "[x]" node would compile as a floating variable.
+      textNode("redNode", "[x]\nfoo", "1"),
     ],
     edges: [
       edge("e1", "in", "call"),
@@ -97,6 +99,7 @@ it("red nodes and edges are ignored", () => {
   const compiled = compileCanvas(canvas);
 
   expect(compiled.nodes.map((n) => n.id)).toEqual(["call", "in", "out"]);
+  expect(compiled.nodes.find((n) => n.id === "redNode")).toBeUndefined();
   expect(compiled.edges.map((e) => e.id)).toEqual(["e1", "e2"]);
   expect(nodeType(compiled, "in")).toBe("input");
   expect(nodeType(compiled, "call")).toBe("standard-call");
@@ -104,12 +107,12 @@ it("red nodes and edges are ignored", () => {
   expect(() => hydrateGraph(canvas)).not.toThrow();
 });
 
-// Known bug, pinned here so P0.4 can fix it: an uncoloured arrow out of a red
+// Known bug, pinned here so P0.4 (g) can fix it: an uncoloured arrow out of a red
 // node survives compilation with a dependency on the dropped node (and
 // isReflexive: true), and CannoliGraph hydration then throws
 // "Cannot read properties of undefined (reading 'addEventListener')".
-// When this starts passing, change it.fails to it.
-it.fails("edges from a red node are dropped with it (P0.4)", () => {
+// Fixed by DESIGN §15 P0.4 (g). When this starts passing, change it.fails to it.
+it.fails("edges from a red node are dropped with it (P0.4 (g))", () => {
   const canvas = {
     nodes: [
       textNode("in", "Say hi", "6"),

@@ -25,7 +25,8 @@ export interface CompiledCanvas {
 }
 
 // Canvas fields that only describe layout or are copied into cannoliData.
-// Everything else (ids, types, colours, labels, files, urls, cannoliData) is kept.
+// Everything else (ids, types, colours, labels, files, urls, cannoliData) is kept,
+// including fromEnd/toEnd: the factory reads them to decide whether an edge counts.
 const LAYOUT_KEYS = new Set([
   "x",
   "y",
@@ -33,8 +34,6 @@ const LAYOUT_KEYS = new Set([
   "height",
   "fromSide",
   "toSide",
-  "fromEnd",
-  "toEnd",
   "text",
 ]);
 
