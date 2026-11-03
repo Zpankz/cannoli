@@ -12,7 +12,7 @@
 		{"type":"text","text":"","id":"62447884955fc816","x":-409,"y":-560,"width":349,"height":280,"color":"6"},
 		{"type":"text","text":"You can reference notes in Cannolis to give LLMs up-to-date context conveniently.","id":"305dbf844cee4b22","x":-562,"y":-780,"width":328,"height":102},
 		{"type":"text","text":"To show the LLM the content of a note, simply wrap a note link in curly braces, just as you would a variable.","id":"9ae16a6025e83401","x":-1060,"y":-521,"width":345,"height":113},
-		{"type":"file","file":"Cannoli College/Example notes/Apple Trees.md","text":"{{[[Apple Trees]]}}","id":"b7597d6f39e7acc9","x":-690,"y":-120,"width":283,"height":145},
+		{"type":"file","file":"Cannoli College/Example notes/Apple Trees.md","id":"b7597d6f39e7acc9","x":-690,"y":-120,"width":283,"height":145},
 		{"type":"text","text":"What's the note above about","id":"8039b20f5e260110","x":-673,"y":80,"width":250,"height":80},
 		{"type":"text","text":"What's this about:\n{{a}}","id":"dec28b770c6e0601","x":-359,"y":80,"width":250,"height":80},
 		{"type":"text","text":"","id":"37c33e8f19a09beb","x":-680,"y":-380,"width":250,"height":100,"color":"6"},

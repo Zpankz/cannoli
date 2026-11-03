@@ -15,13 +15,13 @@
 		{"type":"text","text":"If a loop group has incoming arrows from within itself, it will only loop if they are all activated.\n\nThis means you can use choice arrows to create groups that stop looping based on a decision the LLM makes.","id":"109c6d143c904ac2","x":-40,"y":700,"width":559,"height":153},
 		{"type":"text","text":"Are there any obvious improvements to this article?\n\n{{article}}","id":"c9ac27366825fb46","x":-271,"y":1327,"width":283,"height":122},
 		{"type":"text","text":"What would you change?","id":"42e65836e7bc0d2d","x":-254,"y":1540,"width":250,"height":60},
-		{"type":"file","file":"Cannoli College/Example notes/Lemons for Cleaning.md","text":"{{[[Lemons for Cleaning]]}}","id":"9b09ade8a96fdc49","x":-330,"y":1025,"width":400,"height":203},
+		{"type":"file","file":"Cannoli College/Example notes/Lemons for Cleaning.md","id":"9b09ade8a96fdc49","x":-330,"y":1025,"width":400,"height":203},
 		{"type":"text","text":"In this example, we use choice arrows to have the LLM decide whether to edit a note.\n\nThe decision to edit it activates a path that points to the group itself, so the group will loop again once it is done.\n\nIf that path is rejected, the group will not loop again.","id":"3ae1b1035e633274","x":-814,"y":1228,"width":402,"height":259},
 		{"type":"text","text":"Respond with a rewrite based on your feedback.","id":"92dee3525bb5528a","x":-289,"y":1660,"width":320,"height":100},
 		{"type":"text","text":"","id":"65d12403b1902562","x":120,"y":1328,"width":165,"height":121,"color":"6"},
 		{"type":"text","text":"","id":"c19decb87eb68f4e","x":340,"y":1443,"width":440,"height":535,"color":"6"},
 		{"type":"text","text":"It doesn't matter what the node pointing at the group is, or what kind of arrow. In this case we use a blank arrow to signal that the rewrite path was chosen and add the chat history suppression suffix (~) so we don't continue the conversation in the next loop.","id":"07a8d464729bd7db","x":-800,"y":1864,"width":388,"height":196},
-		{"type":"file","file":"Cannoli College/Example notes/Lemons for Cleaning.md","text":"{{[[Lemons for Cleaning]]}}","id":"a447b4af7f9b59af","x":-329,"y":1820,"width":400,"height":180}
+		{"type":"file","file":"Cannoli College/Example notes/Lemons for Cleaning.md","id":"a447b4af7f9b59af","x":-329,"y":1820,"width":400,"height":180}
 	],
 	"edges":[
 		{"id":"98bface3c4272939","fromNode":"08d62752b952d1b9","fromSide":"right","toNode":"308eacb6bc673cc4","toSide":"right","label":"a"},
