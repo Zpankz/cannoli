@@ -183,6 +183,7 @@ const holdKey = async (name: string, down: boolean) => {
   await sleep(120);
 };
 const out: unknown[] = [];
+let failed = false;
 try {
   for (const s of steps) {
     if (s.eval !== undefined) {
@@ -289,8 +290,10 @@ try {
     }
   }
 } catch (e) {
+  failed = true;
   out.push(`ERROR: ${(e as Error).message}`);
 }
 console.log(JSON.stringify(out, null, 1));
 ws.close();
-process.exit(0);
+// Non-zero exit when a step failed, so callers can detect it.
+process.exit(failed ? 1 : 0);

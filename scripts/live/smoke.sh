@@ -16,7 +16,7 @@ bun "$LIVE_SCRIPTS/seed-vault.ts"
 "$LIVE_SCRIPTS/launch-isolated.sh" start
 
 model="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ollamaModel"])' "$LIVE_VAULT/.obsidian/plugins/$PLUGIN_ID/data.json")"
-curl -sf "http://127.0.0.1:11434/api/tags" | rg -qF "\"$model\"" || { echo "Ollama not serving model $model" >&2; exit 1; }
+curl -sf "http://127.0.0.1:11434/api/tags" | grep -qF "\"$model\"" || { echo "Ollama not serving model $model" >&2; exit 1; }
 
 # The start command acts on the active file, so open the canvas first.
 OPEN="$canvas" CMD="$PLUGIN_ID:start" cdp
