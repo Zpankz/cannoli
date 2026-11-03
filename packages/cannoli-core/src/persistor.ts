@@ -70,47 +70,55 @@ export type CanvasNodeData = z.infer<typeof canvasNodeDataSchema> & {
   [key: string]: any;
 };
 
-export const canvasFileDataSchema = canvasNodeDataSchema.merge(
-  z.object({
-    type: z.literal("file"),
-    file: z.string(),
-    subpath: z.string().optional(),
-  }),
-).passthrough();
+export const canvasFileDataSchema = canvasNodeDataSchema
+  .merge(
+    z.object({
+      type: z.literal("file"),
+      file: z.string(),
+      subpath: z.string().optional(),
+    }),
+  )
+  .passthrough();
 
 export type CanvasFileData = z.infer<typeof canvasFileDataSchema>;
 
-const canvasTextDataSchema = canvasNodeDataSchema.merge(
-  z.object({
-    type: z.literal("text"),
-    text: z.string(),
-  }),
-).passthrough();
+const canvasTextDataSchema = canvasNodeDataSchema
+  .merge(
+    z.object({
+      type: z.literal("text"),
+      text: z.string(),
+    }),
+  )
+  .passthrough();
 
 export type CanvasTextData = z.infer<typeof canvasTextDataSchema>;
 
-export const canvasLinkDataSchema = canvasNodeDataSchema.merge(
-  z.object({
-    type: z.literal("link"),
-    url: z.string(),
-  }),
-).passthrough();
+export const canvasLinkDataSchema = canvasNodeDataSchema
+  .merge(
+    z.object({
+      type: z.literal("link"),
+      url: z.string(),
+    }),
+  )
+  .passthrough();
 
 export type CanvasLinkData = z.infer<typeof canvasLinkDataSchema>;
 
 /** The background image rendering style */
 export type BackgroundStyle = "cover" | "ratio" | "repeat";
 
-export const canvasGroupDataSchema = canvasNodeDataSchema.merge(
-  z.object({
-    type: z.literal("group"),
-    label: z.string().optional(),
-    background: z.string().optional(),
-    backgroundStyle: z
-      .union([z.literal("cover"), z.literal("ratio"), z.literal("repeat")])
-      .optional(),
-  }),
-).passthrough();
+export const canvasGroupDataSchema = canvasNodeDataSchema
+  .merge(
+    z.object({
+      type: z.literal("group"),
+      label: z.string().optional(),
+      background: z.string().optional(),
+      backgroundStyle: z
+        .union([z.literal("cover"), z.literal("ratio"), z.literal("repeat")])
+        .optional(),
+    }),
+  )
+  .passthrough();
 
 export type CanvasGroupData = z.infer<typeof canvasGroupDataSchema>;
 
