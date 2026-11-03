@@ -24,3 +24,6 @@ data.json
 .turbo
 dist
 .tsup
+
+# Live test harness state (isolated Obsidian profile + test vault), scratch files
+.scratch/

@@ -18,7 +18,8 @@ case "$CDP_PORT" in
 esac
 
 # PID of the process listening on our CDP port (empty if none).
-live_pid() { lsof -tiTCP:"$CDP_PORT" -sTCP:LISTEN 2>/dev/null | head -1; }
+# lsof exits 1 when nothing listens; `|| true` keeps `set -euo pipefail` callers alive.
+live_pid() { lsof -tiTCP:"$CDP_PORT" -sTCP:LISTEN 2>/dev/null | head -1 || true; }
 
 # Bun runner for the CDP helpers.
 cdp() { bun "$LIVE_SCRIPTS/cdp-eval.ts" "$@"; }
