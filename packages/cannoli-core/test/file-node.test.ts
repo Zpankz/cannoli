@@ -61,6 +61,42 @@ describe("file nodes reference their note through `file`", () => {
     ]);
   });
 
+  it("gives a non-note file (image, pdf, plain canvas) no note reference", () => {
+    for (const file of ["A/img.png", "A/paper.pdf", "A/board.canvas"]) {
+      const note = compileCanvas(fileNodeCanvas({ file })).nodes.find(
+        (n) => n.id === "note",
+      );
+      expect(note?.cannoliData?.references).toEqual([]);
+    }
+  });
+
+  it("never writes into a non-note file; the run ends with an error", async () => {
+    const vault = fakeVault();
+    const canvas = {
+      nodes: [
+        { id: "in", type: "text", text: "hello", color: "6", ...box },
+        { id: "img", type: "file", file: "A/img.png", ...box, x: 400 },
+      ],
+      edges: [
+        {
+          id: "e1",
+          fromNode: "in",
+          fromSide: "right",
+          toNode: "img",
+          toSide: "left",
+        },
+      ],
+    };
+    const { finished, stoppages } = await runCanvas(canvas, {
+      vault,
+      isMock: false,
+    });
+
+    expect(finished).toBe(true);
+    expect(stoppages.map((s) => s.reason)).toEqual(["error"]);
+    expect(vault.log.filter((l) => l.startsWith("editNote"))).toEqual([]);
+  });
+
   it("runs a plain file node to completion and reads the note", async () => {
     const vault = fakeVault();
     const { finished, stoppages } = await runCanvas(plainFileNode, {

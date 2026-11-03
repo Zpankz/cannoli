@@ -1331,6 +1331,13 @@ export class CannoliFactory {
       node.file &&
       this.getContentNodeType(node) === ContentNodeType.Reference
     ) {
+      // Only a note can be read or written. Any other file (image, pdf,
+      // canvas) gets no reference, so the run errors instead of writing
+      // text into it.
+      const basename = node.file.split("/").pop() ?? "";
+      if (!/\.md$/i.test(node.file) && basename.includes(".")) {
+        return [];
+      }
       return [
         {
           name: node.file.replace(/\.md$/i, ""),
