@@ -30,8 +30,10 @@ describe("canvas schema passthrough", () => {
       { id: "l", type: "link", url: "https://example.com", ...base },
       { id: "g", type: "group", label: "G", ...base },
     ].map((n) => ({ ...n, cannoli: meta, extra: { keep: true } }));
-    const parsed = canvasDataSchema.parse({ nodes, edges: [] })
-      .nodes as Record<string, unknown>[];
+    const parsed = canvasDataSchema.parse({ nodes, edges: [] }).nodes as Record<
+      string,
+      unknown
+    >[];
     for (const p of parsed) {
       expect(p.cannoli, `node ${p.id}`).toEqual(meta);
       expect(p.extra, `node ${p.id}`).toEqual({ keep: true });
@@ -71,7 +73,13 @@ describe("canvas schema passthrough", () => {
       },
       probe: "x",
     };
-    const parsed = parseOne({ id: "a", type: "text", text: "", ...base, cannoli: full });
+    const parsed = parseOne({
+      id: "a",
+      type: "text",
+      text: "",
+      ...base,
+      cannoli: full,
+    });
     expect(parsed.cannoli).toEqual(full);
   });
 
@@ -100,8 +108,20 @@ describe("cannoliData reaches the factory", () => {
         { id: "output", type: "text", text: "", color: "6", ...base },
       ],
       edges: [
-        { id: "e1", fromNode: "prompt", fromSide: "right", toNode: "call", toSide: "left" },
-        { id: "e2", fromNode: "call", fromSide: "right", toNode: "output", toSide: "left" },
+        {
+          id: "e1",
+          fromNode: "prompt",
+          fromSide: "right",
+          toNode: "call",
+          toSide: "left",
+        },
+        {
+          id: "e2",
+          fromNode: "call",
+          fromSide: "right",
+          toNode: "output",
+          toSide: "left",
+        },
       ],
     };
     const compiled = compileCanvas(canvas);
@@ -110,12 +130,16 @@ describe("cannoliData reaches the factory", () => {
       edges: Record<string, unknown>[];
     };
     for (const n of withData.nodes) {
-      const data = structuredClone(compiled.nodes.find((c) => c.id === n.id)!.cannoliData!);
+      const data = structuredClone(
+        compiled.nodes.find((c) => c.id === n.id)!.cannoliData!,
+      );
       if (n.id === "prompt") data.text = "RESUMED FROM CANNOLIDATA";
       n.cannoliData = data;
     }
     for (const e of withData.edges) {
-      e.cannoliData = structuredClone(compiled.edges.find((c) => c.id === e.id)!.cannoliData!);
+      e.cannoliData = structuredClone(
+        compiled.edges.find((c) => c.id === e.id)!.cannoliData!,
+      );
     }
 
     const run = new Run({ cannoli: withData, isMock: true, resume: true });
@@ -132,8 +156,20 @@ describe("stale cannoliData from the file", () => {
       { id: "output", type: "text", text: "", color: "6", ...base },
     ] as Record<string, unknown>[],
     edges: [
-      { id: "e1", fromNode: "prompt", fromSide: "right", toNode: "call", toSide: "left" },
-      { id: "e2", fromNode: "call", fromSide: "right", toNode: "output", toSide: "left" },
+      {
+        id: "e1",
+        fromNode: "prompt",
+        fromSide: "right",
+        toNode: "call",
+        toSide: "left",
+      },
+      {
+        id: "e2",
+        fromNode: "call",
+        fromSide: "right",
+        toNode: "output",
+        toSide: "left",
+      },
     ] as Record<string, unknown>[],
   });
 
@@ -143,9 +179,13 @@ describe("stale cannoliData from the file", () => {
     const canvas = threeNode();
     const compiled = compileCanvas(canvas);
     for (const n of canvas.nodes)
-      n.cannoliData = structuredClone(compiled.nodes.find((c) => c.id === n.id)!.cannoliData);
+      n.cannoliData = structuredClone(
+        compiled.nodes.find((c) => c.id === n.id)!.cannoliData,
+      );
     for (const e of canvas.edges)
-      e.cannoliData = structuredClone(compiled.edges.find((c) => c.id === e.id)!.cannoliData);
+      e.cannoliData = structuredClone(
+        compiled.edges.find((c) => c.id === e.id)!.cannoliData,
+      );
     return canvas;
   };
 
@@ -181,7 +221,13 @@ describe("top-level fields do not steer compilation", () => {
         { id: "call", type: "text", text: "", ...base },
       ] as Record<string, unknown>[],
       edges: [
-        { id: "e1", fromNode: "prompt", fromSide: "right", toNode: "call", toSide: "left" },
+        {
+          id: "e1",
+          fromNode: "prompt",
+          fromSide: "right",
+          toNode: "call",
+          toSide: "left",
+        },
       ],
     };
     const baseline = compileCanvas(canvas).edges[0].cannoliData?.type;

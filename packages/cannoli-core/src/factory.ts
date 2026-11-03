@@ -142,7 +142,10 @@ export class CannoliFactory {
     // are resuming, drop it so only data built below counts (otherwise red or
     // untyped objects would keep it and survive the filter further down).
     if (!this.resume) {
-      for (const obj of [...this.cannoliData.nodes, ...this.cannoliData.edges]) {
+      for (const obj of [
+        ...this.cannoliData.nodes,
+        ...this.cannoliData.edges,
+      ]) {
         delete obj.cannoliData;
       }
     }
