@@ -92,8 +92,44 @@ describe("canvas schema passthrough", () => {
       ...base,
       cannoli: "garbage",
     });
-    expect(parsed.cannoli).toBeUndefined();
+    expect("cannoli" in parsed).toBe(false);
     expect(parsed.text).toBe("hi");
+  });
+
+  it("malformed cannoli metadata on an edge is dropped from the parse", () => {
+    const edge = canvasDataSchema.parse({
+      nodes: [],
+      edges: [
+        {
+          id: "e",
+          fromNode: "a",
+          fromSide: "right",
+          toNode: "b",
+          toSide: "left",
+          cannoli: { v: "1" },
+        },
+      ],
+    }).edges[0] as Record<string, unknown>;
+    expect("cannoli" in edge).toBe(false);
+  });
+
+  it("write-back with Object.assign keeps the file's own cannoli value and unknown fields", () => {
+    // The plugin copies parsed nodes onto the canvas file's nodes (canvas.ts start()).
+    const fileNode = {
+      id: "a",
+      type: "text",
+      text: "hi",
+      ...base,
+      cannoli: "set by another plugin",
+      probe: { keep: true },
+    };
+    const written = Object.assign(
+      structuredClone(fileNode),
+      parseOne(fileNode),
+    );
+    expect(written.cannoli).toBe("set by another plugin");
+    expect(written.probe).toEqual({ keep: true });
+    expect(JSON.parse(JSON.stringify(written))).toEqual(fileNode);
   });
 });
 

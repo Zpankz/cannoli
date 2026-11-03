@@ -52,6 +52,18 @@ export type CannoliMeta = z.infer<typeof cannoliMetaSchema>;
 // A malformed cache is dropped rather than failing the whole parse.
 const cannoliMetaField = cannoliMetaSchema.optional().catch(undefined);
 
+// zod keeps a caught key as `cannoli: undefined`. The plugin copies parsed nodes and
+// edges back onto the canvas file with Object.assign, which would then erase the
+// file's own (malformed or foreign) value. Remove the key so the file keeps it.
+const withoutUndefinedCannoli = <T extends { cannoli?: unknown }>(
+  item: T,
+): T => {
+  if (!("cannoli" in item) || item.cannoli !== undefined) return item;
+  const copy = { ...item };
+  delete copy.cannoli;
+  return copy;
+};
+
 const canvasNodeDataSchema = z
   .object({
     id: z.string(),
@@ -164,8 +176,8 @@ export type CanvasEdgeData = z.infer<typeof canvasEdgeDataSchema> & {
 };
 
 export const canvasDataSchema = z.object({
-  nodes: z.array(allCanvasNodeDataSchema),
-  edges: z.array(canvasEdgeDataSchema),
+  nodes: z.array(allCanvasNodeDataSchema.transform(withoutUndefinedCannoli)),
+  edges: z.array(canvasEdgeDataSchema.transform(withoutUndefinedCannoli)),
 });
 
 export type CanvasData = z.infer<typeof canvasDataSchema>;
