@@ -62,9 +62,9 @@ describe("compile snapshot stable", () => {
     "compile snapshot stable: %s",
     async (_name, fixture) => {
       const compiled = compileCanvas(fixture.canvas);
-      await expect(JSON.stringify(compiled, null, 2) + "\n").toMatchFileSnapshot(
-        `./__snapshots__/compile/${fixture.slug}.json`,
-      );
+      await expect(
+        JSON.stringify(compiled, null, 2) + "\n",
+      ).toMatchFileSnapshot(`./__snapshots__/compile/${fixture.slug}.json`);
     },
   );
 
