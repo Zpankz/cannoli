@@ -88,7 +88,9 @@ describe("browser-safe", () => {
 
     it("bundles core sources", () => {
       expect(result!.inputs).toContain("src/run.ts");
-      expect(result!.inputs.filter((p) => p.startsWith("src/")).length).toBeGreaterThan(30);
+      expect(
+        result!.inputs.filter((p) => p.startsWith("src/")).length,
+      ).toBeGreaterThan(30);
     });
 
     it("finds exactly the known CallNode Buffer use", () => {
