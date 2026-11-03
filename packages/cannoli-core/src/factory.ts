@@ -1322,6 +1322,24 @@ export class CannoliFactory {
     // Unified regex to capture any type of reference within double curly braces
     const unifiedPattern = /{{(.*?)}}/g;
 
+    // A file node names its note in `file` (a vault path such as
+    // "Folder/Note.md"); canvases saved by Obsidian have no `text` on file
+    // nodes. Older Cannoli canvases may carry a leftover `text`, which can name
+    // the wrong note, so `text` is only a fallback when `file` is empty.
+    if (
+      node.type === "file" &&
+      node.file &&
+      this.getContentNodeType(node) === ContentNodeType.Reference
+    ) {
+      return [
+        {
+          name: node.file.replace(/\.md$/i, ""),
+          type: ReferenceType.Note,
+          shouldExtract: true,
+        },
+      ];
+    }
+
     const references: Reference[] = [];
     const textCopy = node.text;
     let match: RegExpExecArray | null;
