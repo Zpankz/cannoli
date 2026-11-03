@@ -42,7 +42,7 @@ export class ChatResponseEdge extends CannoliEdge {
         this.beginningOfStream = false;
       }
 
-      this.execute();
+      this.startExecution();
     }
   }
 }

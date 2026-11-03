@@ -895,7 +895,7 @@ export class CannoliNode extends CannoliVertex {
       this.allDependenciesComplete() &&
       this.status === CannoliObjectStatus.Pending
     ) {
-      this.execute();
+      this.startExecution();
     }
   }
 

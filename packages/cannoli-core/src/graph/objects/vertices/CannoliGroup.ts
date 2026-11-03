@@ -156,7 +156,7 @@ export class CannoliGroup extends CannoliVertex {
 
   dependencyExecuting(dependency: CannoliObject): void {
     if (this.status === CannoliObjectStatus.Pending) {
-      this.execute();
+      this.startExecution();
     }
   }
 

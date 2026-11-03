@@ -168,7 +168,7 @@ export class LoggingEdge extends CannoliEdge {
 
   dependencyCompleted(dependency: CannoliObject): void {
     if (this.getSource().status === CannoliObjectStatus.Complete) {
-      this.execute();
+      this.startExecution();
     }
   }
 }

@@ -129,12 +129,12 @@ export class ContentNode extends CannoliNode {
         })) ||
       dependency instanceof ChatResponseEdge
     ) {
-      this.execute();
+      this.startExecution();
     } else if (
       this.allDependenciesComplete() &&
       this.status === CannoliObjectStatus.Pending
     ) {
-      this.execute();
+      this.startExecution();
     }
   }
 
