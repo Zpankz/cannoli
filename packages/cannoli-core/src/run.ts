@@ -420,7 +420,7 @@ export class Run {
     // Call execute on all root objects
     for (const object of Object.values(this.graph)) {
       if (object.dependencies.length === 0) {
-        object.execute();
+        object.startExecution();
         executedObjectsCount++;
       }
     }
@@ -785,6 +785,24 @@ export class Run {
     }
 
     this.error(message ?? "Unknown error");
+  }
+
+  /**
+   * An object's execute() threw. End the run with an error stoppage, unless
+   * it has already finished (stopped by the user, errored or completed).
+   */
+  nodeExecutionFailed(object: CannoliObject, error: unknown) {
+    if (this.stopTime) {
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (this.persistor && object instanceof CannoliVertex) {
+      this.persistor.addError(object.id, message);
+    }
+
+    this.handleFinish("error", message);
   }
 
   objectWarning(object: CannoliObject, message?: string) {

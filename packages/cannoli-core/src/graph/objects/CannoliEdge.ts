@@ -156,7 +156,7 @@ export class CannoliEdge extends CannoliObject {
       // 		this.content
       // 	} and messages:\n${JSON.stringify(this.messages, null, 2)}`
       // );
-      this.execute();
+      this.startExecution();
     }
   }
 

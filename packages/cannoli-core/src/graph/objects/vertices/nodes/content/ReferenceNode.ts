@@ -35,6 +35,12 @@ export class ReferenceNode extends ContentNode {
   }
 
   async execute(): Promise<void> {
+    // The constructor flags a missing reference before the run is listening,
+    // so fail here, where the run catches it as an error stoppage.
+    if (!this.reference) {
+      throw new Error("Could not find reference.");
+    }
+
     this.executing();
 
     let content: string | null = null;

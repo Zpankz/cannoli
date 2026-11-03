@@ -347,6 +347,16 @@ export class CannoliObject extends EventTarget {
 
   async execute() {}
 
+  /**
+   * Start execute() without waiting for it. If it throws, the run ends with
+   * an error stoppage; without this the error was lost and the run hung.
+   */
+  startExecution(): void {
+    this.execute().catch((error: unknown) => {
+      this.run.nodeExecutionFailed(this, error);
+    });
+  }
+
   logDetails(): string {
     let dependenciesString = "";
     for (const dependency of this.dependencies) {
