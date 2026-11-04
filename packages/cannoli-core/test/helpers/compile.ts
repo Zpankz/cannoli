@@ -72,7 +72,7 @@ function normalise(value: unknown): unknown {
   return value;
 }
 
-function normaliseObject(obj: Record<string, unknown>): CompiledObject {
+export function normaliseObject(obj: Record<string, unknown>): CompiledObject {
   const kept: Record<string, unknown> = {};
   for (const [key, v] of Object.entries(obj)) {
     if (!LAYOUT_KEYS.has(key)) kept[key] = v;
@@ -80,7 +80,7 @@ function normaliseObject(obj: Record<string, unknown>): CompiledObject {
   return normalise(kept) as CompiledObject;
 }
 
-const byId = (a: { id: string }, b: { id: string }) =>
+export const byId = (a: { id: string }, b: { id: string }) =>
   a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 
 /** Compile a canvas and return a normalised, deterministic view of the result. */
