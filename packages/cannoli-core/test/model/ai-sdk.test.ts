@@ -1,3 +1,4 @@
+import type { ModelFetch } from "../../src/model/fetch";
 // AiSdkModelPort (DESIGN §4.2, P1.3): Message[] to the AI SDK and back, run
 // through the real provider packages against a fake fetch.
 import { generateText } from "ai";
@@ -634,7 +635,7 @@ describe("MockModelPort", () => {
 
 it("image URL downloads use the injected fetch and call abort signal", async () => {
   const controller = new AbortController();
-  const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+  const fetch = vi.fn<ModelFetch>(async (_input, init) => {
     expect(init?.signal).toBe(controller.signal);
     return new Response(new Uint8Array([1, 2, 3]), {
       headers: { "content-type": "image/png" },

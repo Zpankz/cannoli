@@ -56,3 +56,4 @@ export {
   toLegacyResponse,
   toModelRef,
 } from "./model/legacy";
+export type { ModelFetch } from "./model/fetch";

@@ -1,3 +1,4 @@
+import type { ModelFetch } from "../fetch";
 // AiSdkModelPort: ModelPort over the Vercel AI SDK v7 (DESIGN §4.2, P1.3).
 // Structured output (`req.output`, Output.choice) comes in P1.4; until then
 // legacy forced function calls go through a single forced tool.
@@ -37,7 +38,7 @@ import {
 export interface AiSdkModelPortOptions {
   providers: AiSdkProviderConfig[];
   /** The fetch every provider uses; the global fetch when unset. */
-  fetch?: typeof globalThis.fetch;
+  fetch?: ModelFetch;
   /** Takes calls no configured provider can serve. */
   fallback?: ModelPort;
   /** Model steps per call; the default 1 returns tool calls to the caller. */
@@ -67,7 +68,7 @@ function textOf(content: Message["content"]): string {
  */
 async function imagePart(
   part: Extract<ContentPart, { type: "image" }>,
-  fetch: typeof globalThis.fetch,
+  fetch: ModelFetch,
   signal?: AbortSignal,
 ): Promise<Part> {
   const data = typeof part.data === "string" ? part.data : part.data.href;
@@ -122,7 +123,7 @@ function toolCallOf(part: ToolCallPart): Part {
 
 async function toModelMessage(
   m: Message,
-  fetch: typeof globalThis.fetch,
+  fetch: ModelFetch,
   signal?: AbortSignal,
 ): Promise<ModelMessage> {
   const providerOptions = sdkProviderOptions(m.providerOptions);
@@ -193,7 +194,7 @@ export interface AiSdkPrompt {
  */
 export async function toAiSdkPrompt(
   req: GenerateRequest,
-  fetch: typeof globalThis.fetch = globalThis.fetch,
+  fetch: ModelFetch = globalThis.fetch,
 ): Promise<AiSdkPrompt> {
   const messages = await Promise.all(
     req.messages.map((m) => toModelMessage(m, fetch, req.signal)),
@@ -338,7 +339,7 @@ function finishReasonOf(reason: FinishReason | undefined): string {
 export class AiSdkModelPort implements ModelPort {
   constructor(private readonly options: AiSdkModelPortOptions) {}
 
-  private get fetch(): typeof globalThis.fetch {
+  private get fetch(): ModelFetch {
     return this.options.fetch ?? globalThis.fetch;
   }
 
