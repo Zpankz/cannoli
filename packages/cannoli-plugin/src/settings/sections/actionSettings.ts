@@ -2,6 +2,7 @@ import { HttpTemplate } from "@deablabs/cannoli-core";
 import { Setting } from "obsidian";
 import Cannoli from "src/main";
 import { HttpTemplateEditorModal } from "src/modals/httpTemplateEditor";
+import { addSecretSetting } from "src/settings/sections/secretSetting";
 
 export function createActionSettings(
   containerEl: HTMLElement,
@@ -9,6 +10,14 @@ export function createActionSettings(
   display: () => void,
 ): void {
   containerEl.createEl("h1", { text: "Action nodes" });
+
+  addSecretSetting(
+    containerEl,
+    plugin,
+    "exaAPIKey",
+    "Exa API key",
+    "This key turns on the Exa search action and is available to cannolis as {{EXA_API_KEY}}.",
+  );
 
   new Setting(containerEl)
     .setName("Action node templates")

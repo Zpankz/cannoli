@@ -1,5 +1,6 @@
 import { Notice, Setting } from "obsidian";
 import Cannoli from "src/main";
+import { addSecretSetting } from "src/settings/sections/secretSetting";
 import { ValTownModal } from "src/modals/viewVals";
 
 export function createValTownSettings(
@@ -9,21 +10,13 @@ export function createValTownSettings(
   // ValTown section
   containerEl.createEl("h1", { text: "ValTown" });
 
-  new Setting(containerEl)
-    .setName("ValTown API key")
-    .setDesc(
-      `This key will be used to create Vals on your Val Town account when you run the "Create Val" command.`,
-    )
-    .addText((text) =>
-      text
-        .setValue(plugin.settings.valTownAPIKey)
-        .setPlaceholder("...")
-        .onChange(async (value) => {
-          plugin.settings.valTownAPIKey = value;
-          await plugin.saveSettings();
-        })
-        .inputEl.setAttribute("type", "password"),
-    );
+  addSecretSetting(
+    containerEl,
+    plugin,
+    "valTownAPIKey",
+    "ValTown API key",
+    `This key will be used to create Vals on your Val Town account when you run the "Create Val" command.`,
+  );
 
   new Setting(containerEl)
     .setName("View vals")
@@ -39,7 +32,7 @@ export function createValTownSettings(
             await plugin.getAllCannoliFunctions(),
             plugin.getAllCannoliFunctions,
             plugin.openCanvas,
-            plugin.settings.valTownAPIKey,
+            plugin.secretStore.valTownKey,
             plugin.bakeToValTown,
             plugin.createCanvas,
           );

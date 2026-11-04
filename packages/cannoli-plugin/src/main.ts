@@ -25,6 +25,7 @@ import {
   CannoliFunctionInfo,
   parseCannoliFunctionInfo,
   BakeResult,
+  secretsToRecord,
 } from "@deablabs/cannoli-core";
 import { cannoliCollege } from "../assets/cannoliCollege";
 import { cannoliIcon } from "../assets/cannoliIcon";
@@ -37,9 +38,12 @@ import { EditValModal } from "./modals/editVal";
 import { RunPriceAlertModal } from "./modals/runPriceAlert";
 import { CannoliSettings, DEFAULT_SETTINGS } from "./settings/settings";
 import { CannoliSettingTab } from "./settings/settingsTab";
+import { migrateSettings } from "./secrets/migrate";
+import { ObsidianSecretResolver } from "./secrets/secret-store";
 
 export default class Cannoli extends Plugin {
   settings: CannoliSettings;
+  secretStore: ObsidianSecretResolver;
   runningCannolis: { [key: string]: () => void } = {};
 
   async onload() {
@@ -124,7 +128,23 @@ export default class Cannoli extends Plugin {
   onunload() {}
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    // secretStorage is typed as always present; guard for older or odd hosts.
+    const store = this.app.secretStorage as
+      | typeof this.app.secretStorage
+      | undefined;
+    const { settings, moved, changed, warning } = migrateSettings(
+      await this.loadData(),
+      store,
+    );
+    this.settings = settings;
+    this.secretStore = new ObsidianSecretResolver(store, () => this.settings);
+    if (changed) await this.saveSettings();
+    if (moved > 0) {
+      new Notice(
+        `Cannoli moved ${moved} ${moved === 1 ? "key" : "keys"} to Obsidian's secure storage.`,
+      );
+    }
+    if (warning) new Notice(warning, 0);
   }
 
   async saveSettings() {
@@ -390,7 +410,7 @@ export default class Cannoli extends Plugin {
       await this.getAllCannoliFunctions(),
       this.getAllCannoliFunctions,
       this.openCanvas,
-      this.settings.valTownAPIKey,
+      this.secretStore.valTownKey,
       this.bakeToValTown,
       this.createCanvas,
     );
@@ -416,7 +436,7 @@ export default class Cannoli extends Plugin {
     }
 
     // Check that the user has a val town api key
-    if (!this.settings.valTownAPIKey) {
+    if (!this.secretStore.valTownKey) {
       new Notice("Please enter a Val Town API key in the Cannoli settings");
       return;
     }
@@ -437,7 +457,7 @@ export default class Cannoli extends Plugin {
       fileManager: new VaultInterface(this),
       actions: this.getActions(),
       config,
-      secrets: this.getSecrets(),
+      secrets: secretsToRecord(this.getSecrets()),
       httpTemplates: this.settings.httpTemplates,
       includeTypes: false,
       includeMetadata: true,
@@ -459,7 +479,7 @@ export default class Cannoli extends Plugin {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.valTownAPIKey}`,
+        Authorization: `Bearer ${this.secretStore.valTownKey}`,
       },
     });
 
@@ -486,7 +506,7 @@ export default class Cannoli extends Plugin {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.valTownAPIKey}`,
+        Authorization: `Bearer ${this.secretStore.valTownKey}`,
       },
     });
 
@@ -531,7 +551,7 @@ export default class Cannoli extends Plugin {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.valTownAPIKey}`,
+        Authorization: `Bearer ${this.secretStore.valTownKey}`,
       },
       body: JSON.stringify({
         code: bakeResult.code,
@@ -549,7 +569,7 @@ export default class Cannoli extends Plugin {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.valTownAPIKey}`,
+        Authorization: `Bearer ${this.secretStore.valTownKey}`,
       },
       body: JSON.stringify({
         readme: bakeResult.readme,
@@ -570,7 +590,7 @@ export default class Cannoli extends Plugin {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.valTownAPIKey}`,
+        Authorization: `Bearer ${this.secretStore.valTownKey}`,
       },
       body: JSON.stringify({
         name: bakeResult.cannoliInfo.name,
@@ -613,7 +633,7 @@ export default class Cannoli extends Plugin {
       fileManager: new VaultInterface(this),
       actions: this.getActions(),
       config,
-      secrets: this.getSecrets(),
+      secrets: secretsToRecord(this.getSecrets()),
       httpTemplates: this.settings.httpTemplates,
       includeTypes: true,
     });
@@ -780,7 +800,7 @@ export default class Cannoli extends Plugin {
     const response = await requestUrl({
       url: `https://api.val.town/v1/me`,
       headers: {
-        Authorization: `Bearer ${this.settings.valTownAPIKey}`,
+        Authorization: `Bearer ${this.secretStore.valTownKey}`,
       },
     });
 
@@ -793,7 +813,7 @@ export default class Cannoli extends Plugin {
     const valsResponse = await requestUrl({
       url: `https://api.val.town/v1/users/${profile.id}/vals`,
       headers: {
-        Authorization: `Bearer ${this.settings.valTownAPIKey}`,
+        Authorization: `Bearer ${this.secretStore.valTownKey}`,
       },
     });
 
@@ -874,7 +894,7 @@ export default class Cannoli extends Plugin {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.valTownAPIKey}`,
+        Authorization: `Bearer ${this.secretStore.valTownKey}`,
       },
       body: JSON.stringify({
         name: "cannoliAnthropicProxyServer",
@@ -1003,7 +1023,7 @@ export default class Cannoli extends Plugin {
       method: "POST",
       headers: {
         "Content-Type": `multipart/form-data; boundary=----${randomBoundryString}`,
-        Authorization: "Bearer " + this.settings.openaiAPIKey,
+        Authorization: "Bearer " + this.secretStore.openaiKey,
       },
       body: concatenated,
     };
@@ -1017,28 +1037,8 @@ export default class Cannoli extends Plugin {
     }
   }
 
-  getSecrets = () => {
-    const secrets = {
-      ...(this.settings.openaiAPIKey
-        ? { OPENAI_API_KEY: this.settings.openaiAPIKey }
-        : {}),
-      ...(this.settings.exaAPIKey
-        ? { EXA_API_KEY: this.settings.exaAPIKey }
-        : {}),
-      ...(this.settings.valTownAPIKey
-        ? { VALTOWN_API_KEY: this.settings.valTownAPIKey }
-        : {}),
-      ...this.settings.secrets.reduce(
-        (acc, secret) => {
-          acc[secret.name] = secret.value;
-          return acc;
-        },
-        {} as Record<string, string>,
-      ),
-    };
-
-    return secrets;
-  };
+  /** Secrets for runs, resolved from SecretStorage at call time. */
+  getSecrets = () => this.secretStore;
 
   getConfig = (forBake?: boolean) => {
     const chatFormatStringIsDefault =
@@ -1071,8 +1071,8 @@ export default class Cannoli extends Plugin {
 
   getActions = () => {
     return [
-      ...(this.settings.openaiAPIKey ? [dalleGenerate] : []),
-      ...(this.settings.exaAPIKey ? [exaSearch] : []),
+      ...(this.secretStore.openaiKey ? [dalleGenerate] : []),
+      ...(this.secretStore.exaKey ? [exaSearch] : []),
       dataviewQuery,
       smartConnectionsQuery,
       modalMaker,
@@ -1087,14 +1087,14 @@ export default class Cannoli extends Plugin {
       switch (p) {
         case "openai":
           return {
-            apiKey: this.settings.openaiAPIKey,
+            apiKey: this.secretStore.providerKey("openai"),
             model: this.settings.defaultModel,
             temperature: this.settings.defaultTemperature,
             baseURL: this.settings.openaiBaseURL,
           };
         case "azure_openai":
           return {
-            apiKey: this.settings.azureAPIKey,
+            apiKey: this.secretStore.providerKey("azure_openai"),
             model: this.settings.azureModel,
             temperature: this.settings.azureTemperature,
             azureOpenAIApiDeploymentName:
@@ -1112,20 +1112,20 @@ export default class Cannoli extends Plugin {
           };
         case "gemini":
           return {
-            apiKey: this.settings.geminiAPIKey,
+            apiKey: this.secretStore.providerKey("gemini"),
             model: this.settings.geminiModel,
             temperature: this.settings.geminiTemperature,
           };
         case "anthropic":
           return {
-            apiKey: this.settings.anthropicAPIKey,
+            apiKey: this.secretStore.providerKey("anthropic"),
             model: this.settings.anthropicModel,
             temperature: this.settings.anthropicTemperature,
             baseURL: this.settings.anthropicBaseURL,
           };
         case "groq":
           return {
-            apiKey: this.settings.groqAPIKey,
+            apiKey: this.secretStore.providerKey("groq"),
             model: this.settings.groqModel,
             temperature: this.settings.groqTemperature,
           };
@@ -1160,15 +1160,11 @@ export default class Cannoli extends Plugin {
 
   startCannoli = async (file: TFile, noCanvas = false) => {
     // If the api key is the default, send a notice telling the user to add their key
-    const keyName = this.settings.llmProvider + "APIKey";
+    // (Azure was never checked here: its v2 key field name did not match.)
     if (
       this.settings.llmProvider !== "ollama" &&
-      // @ts-expect-error - This is a valid check
-      this.settings?.[keyName] !== undefined &&
-      // @ts-expect-error - Please forgive me
-      DEFAULT_SETTINGS?.[keyName] !== undefined &&
-      // @ts-expect-error - I'm sorry
-      this.settings?.[keyName] === DEFAULT_SETTINGS?.[keyName]
+      this.settings.llmProvider !== "azure_openai" &&
+      !this.secretStore.providerKey(this.settings.llmProvider)
     ) {
       new Notice(
         `Please enter your ${this.settings.llmProvider} API key in the Cannoli settings`,
@@ -1300,7 +1296,7 @@ export default class Cannoli extends Plugin {
     const cannoliServerSettings = this.settings.cannoliServerEnabled
       ? {
           url: this.settings.cannoliServerUrl,
-          secret: this.settings.cannoliServerSecret,
+          secret: this.secretStore.cannoliServerSecret,
         }
       : undefined;
 

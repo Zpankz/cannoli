@@ -1,27 +1,19 @@
 import { Setting } from "obsidian";
 import Cannoli from "src/main";
+import { addSecretSetting } from "src/settings/sections/secretSetting";
 import { DEFAULT_SETTINGS } from "src/settings/settings";
 
 export function createGeminiSettings(
   containerEl: HTMLElement,
   plugin: Cannoli,
 ): void {
-  // gemini api key setting
-  new Setting(containerEl)
-    .setName("Gemini API key")
-    .setDesc(
-      "This key will be used to make all Gemini LLM calls. Be aware that complex cannolis, can be expensive to run.",
-    )
-    .addText((text) =>
-      text
-        .setValue(plugin.settings.geminiAPIKey)
-        .setPlaceholder("sk-...")
-        .onChange(async (value) => {
-          plugin.settings.geminiAPIKey = value;
-          await plugin.saveSettings();
-        })
-        .inputEl.setAttribute("type", "password"),
-    );
+  addSecretSetting(
+    containerEl,
+    plugin,
+    "geminiAPIKey",
+    "Gemini API key",
+    "This key will be used to make all Gemini LLM calls. Be aware that complex cannolis, can be expensive to run.",
+  );
   // gemini model setting
   new Setting(containerEl)
     .setName("Gemini model")

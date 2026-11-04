@@ -1,5 +1,6 @@
 import { Notice, Setting } from "obsidian";
 import Cannoli from "src/main";
+import { addSecretSetting } from "src/settings/sections/secretSetting";
 import {
   CannoliServerClient,
   makeCannoliServerClient,
@@ -138,18 +139,14 @@ You can run the latest version of Cannoli Server by running the command below:`,
       });
     });
 
-  new Setting(containerEl)
-    .setName("Server Secret")
-    .setDesc("The secret of your Cannoli server.")
-    .addText((text) => {
-      text.inputEl.setAttribute("type", "password");
-      text.setValue(plugin.settings.cannoliServerSecret);
-      text.onChange(async (value) => {
-        plugin.settings.cannoliServerSecret = value;
-        await plugin.saveSettings();
-        display();
-      });
-    });
+  addSecretSetting(
+    containerEl,
+    plugin,
+    "cannoliServerSecret",
+    "Server Secret",
+    "The secret of your Cannoli server.",
+    display,
+  );
 
   const serverUrlSetting = new Setting(containerEl)
     .setName("Server URL")
@@ -169,7 +166,7 @@ You can run the latest version of Cannoli Server by running the command below:`,
 
   if (plugin.settings.cannoliServerEnabled) {
     const serverClient = makeCannoliServerClient(
-      plugin.settings.cannoliServerSecret,
+      plugin.secretStore.cannoliServerSecret,
       plugin.settings.cannoliServerUrl,
     );
     const status = await serverClient.status

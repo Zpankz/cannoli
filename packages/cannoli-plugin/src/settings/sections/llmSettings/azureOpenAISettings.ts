@@ -1,27 +1,19 @@
 import { Setting } from "obsidian";
 import Cannoli from "src/main";
+import { addSecretSetting } from "src/settings/sections/secretSetting";
 import { DEFAULT_SETTINGS } from "src/settings/settings";
 
 export function createAzureOpenAISettings(
   containerEl: HTMLElement,
   plugin: Cannoli,
 ): void {
-  // azure openai api key setting
-  new Setting(containerEl)
-    .setName("Azure OpenAI API key")
-    .setDesc(
-      "This key will be used to make all Azure OpenAI LLM calls. Be aware that complex cannolis, can be expensive to run.",
-    )
-    .addText((text) =>
-      text
-        .setValue(plugin.settings.azureAPIKey)
-        .setPlaceholder("sk-...")
-        .onChange(async (value) => {
-          plugin.settings.azureAPIKey = value;
-          await plugin.saveSettings();
-        })
-        .inputEl.setAttribute("type", "password"),
-    );
+  addSecretSetting(
+    containerEl,
+    plugin,
+    "azureAPIKey",
+    "Azure OpenAI API key",
+    "This key will be used to make all Azure OpenAI LLM calls. Be aware that complex cannolis, can be expensive to run.",
+  );
   // azure openai model setting
   new Setting(containerEl)
     .setName("Azure OpenAI model")
