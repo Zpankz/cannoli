@@ -11,17 +11,6 @@
           "promptTokens": 12.25
         }
       }
-    },
-    {
-      "reason": "error",
-      "message": "Could not get HTTP template with name \"valtown-email\" from floating nodes or pre-set templates.",
-      "results": {},
-      "usage": {
-        "mock-model": {
-          "numberOfCalls": 1,
-          "promptTokens": 12.25
-        }
-      }
     }
   ],
   "statuses": {

@@ -6,12 +6,6 @@
       "message": "Could not get HTTP template with name \"dataview\" from floating nodes or pre-set templates.",
       "results": {},
       "usage": {}
-    },
-    {
-      "reason": "error",
-      "message": "Could not get HTTP template with name \"[dataview]\nLIST\nFROM \"Cannoli College\"\" from floating nodes or pre-set templates.",
-      "results": {},
-      "usage": {}
     }
   ],
   "statuses": {

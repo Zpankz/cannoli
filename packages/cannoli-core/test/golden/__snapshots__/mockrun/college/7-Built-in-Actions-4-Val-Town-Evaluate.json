@@ -11,17 +11,6 @@
           "promptTokens": 57.25
         }
       }
-    },
-    {
-      "reason": "error",
-      "message": "Could not get HTTP template with name \"valtown-eval\" from floating nodes or pre-set templates.",
-      "results": {},
-      "usage": {
-        "mock-model": {
-          "numberOfCalls": 1,
-          "promptTokens": 57.25
-        }
-      }
     }
   ],
   "statuses": {
