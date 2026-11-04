@@ -74,10 +74,18 @@ class RecordingModel extends BaseChatModel {
 function provider() {
   const model = new RecordingModel();
   const llm = new LLMProvider({
-    configs: [{ provider: "ollama", model: "fake" }],
+    configs: [
+      { provider: "ollama", model: "fake" },
+      { provider: "azure_openai", model: "fake-deployment" },
+    ],
   });
-  llm.getChatClient = () => model;
-  return { llm, model };
+  // The merged config LangChain's client would be built from.
+  const configs: unknown[] = [];
+  llm.getChatClient = (args) => {
+    configs.push(llm.getMergedConfig(args));
+    return model;
+  };
+  return { llm, model, configs };
 }
 
 const choiceFunction = {
@@ -95,6 +103,8 @@ const fixtures: Record<string, GenericCompletionParams> = {
     messages: [{ role: "user", content: "Say hello." }],
     provider: "ollama",
     model: "fake",
+    baseURL: "http://127.0.0.1:11434",
+    max_tokens: 64,
   },
   "system message and history": {
     messages: [
@@ -107,6 +117,12 @@ const fixtures: Record<string, GenericCompletionParams> = {
     provider: "ollama",
     model: "fake",
     temperature: 0.3,
+  },
+  // Its model ref says "openai"; LangChain must still get azure_openai.
+  "azure provider": {
+    messages: [{ role: "user", content: "Say hello." }],
+    provider: "azure_openai",
+    model: "fake-deployment",
   },
   vision: {
     messages: [{ role: "user", content: "What is this?" }],
@@ -162,6 +178,7 @@ describe("LangchainModelPort", () => {
 
       expect(legacy.model.sent, name).toHaveLength(1);
       expect(viaPort.model.sent, name).toEqual(legacy.model.sent);
+      expect(viaPort.configs, name).toStrictEqual(legacy.configs);
       expect(toLegacyResponse(result), name).toEqual(expected);
       expect(result.usage, name).toEqual(legacyUsage);
     }
@@ -187,6 +204,7 @@ describe("LangchainModelPort", () => {
     }
 
     expect(viaPort.model.sent).toEqual(legacy.model.sent);
+    expect(viaPort.configs).toStrictEqual(legacy.configs);
     const deltas = events.flatMap((e) =>
       e.type === "text-delta" ? [e.text] : [],
     );

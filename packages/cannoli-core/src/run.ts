@@ -167,10 +167,6 @@ export function isValidKey(
 }
 
 /**
- * Pass a stream through, calling release once it ends, fails or is closed
- * early by the consumer.
- */
-/**
  * The text of a model stream, passing on usage as it arrives. `first` is the
  * event already read, so a stream that fails to start fails the call.
  */
@@ -195,6 +191,10 @@ async function* streamText(
   }
 }
 
+/**
+ * Pass a stream through, calling release once it ends, fails or is closed
+ * early by the consumer.
+ */
 async function* releaseWhenDone<T>(
   stream: AsyncIterable<T>,
   release: () => void,
@@ -711,7 +711,8 @@ export class Run {
 
   /**
    * The port every model call goes through: by default `llm` wrapped as a
-   * LangchainModelPort, or the port assigned here.
+   * LangchainModelPort, or the port assigned here. Assigning null goes back
+   * to the default; null means no model only while `llm` is unset.
    */
   get model(): ModelPort | null {
     if (this.modelOverride) return this.modelOverride;
