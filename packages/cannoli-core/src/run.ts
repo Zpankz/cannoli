@@ -34,7 +34,11 @@ import { createRng, pick, seedFromCanvas, type Rng } from "./util/rng";
 import { type SecretResolver, toSecretResolver } from "./secrets";
 import { lintSecretInPrompt } from "./language/lints";
 import { redactingPersistor, redactRequest } from "./runtime/redact";
-import { RunController, abortableStream, raceAbort } from "./runtime/controller";
+import {
+  RunController,
+  abortableStream,
+  raceAbort,
+} from "./runtime/controller";
 import { warnExecutingNodes } from "./runtime/stop";
 import { recordCall, type TokenUsage } from "./runtime/usage";
 

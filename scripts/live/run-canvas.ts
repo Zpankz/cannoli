@@ -52,7 +52,9 @@ const stopAfterMs = process.env.STOP_AFTER_MS
   ? Number(process.env.STOP_AFTER_MS)
   : undefined;
 if (stopAfterMs !== undefined && !(stopAfterMs >= 0))
-  usage(`STOP_AFTER_MS must be a number of ms, got ${process.env.STOP_AFTER_MS}`);
+  usage(
+    `STOP_AFTER_MS must be a number of ms, got ${process.env.STOP_AFTER_MS}`,
+  );
 let stoppedAt: string | undefined;
 let stopLatencyMs: number | null | undefined;
 const d = new Date(),

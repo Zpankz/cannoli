@@ -152,7 +152,11 @@ describe("migrateSettings", () => {
     expect(moved).toBe(0);
     expect(settings.settingsVersion).toBe(3);
     expect(settings.openaiAPIKey).toBe("sk-openai-1");
-    expect(settings.secrets.map((s) => s.value)).toEqual(["tok-8", "tok-9", ""]);
+    expect(settings.secrets.map((s) => s.value)).toEqual([
+      "tok-8",
+      "tok-9",
+      "",
+    ]);
   });
 
   it("idempotent on second load", () => {

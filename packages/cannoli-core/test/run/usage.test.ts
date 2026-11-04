@@ -50,7 +50,12 @@ const text = (id: string, t: string, x: number, y: number, color?: string) => ({
   ...box,
   ...(color ? { color } : {}),
 });
-const edge = (id: string, fromNode: string, toNode: string, color?: string) => ({
+const edge = (
+  id: string,
+  fromNode: string,
+  toNode: string,
+  color?: string,
+) => ({
   id,
   fromNode,
   fromSide: "right",
@@ -121,7 +126,11 @@ describe("usage", () => {
           (async function* () {
             yield new AIMessageChunk({
               content: "Once ",
-              usage_metadata: { input_tokens: 9, output_tokens: 0, total_tokens: 9 },
+              usage_metadata: {
+                input_tokens: 9,
+                output_tokens: 0,
+                total_tokens: 9,
+              },
             });
             yield new AIMessageChunk({ content: "upon" });
           })(),
@@ -142,7 +151,10 @@ describe("usage", () => {
     const llm = {
       initialized: true,
       getMergedConfig: () => ({ model: "fake", provider: "ollama" }),
-      async getCompletionStream(_req: GenericCompletionParams, opts?: CallOptions) {
+      async getCompletionStream(
+        _req: GenericCompletionParams,
+        opts?: CallOptions,
+      ) {
         async function* chunks() {
           opts?.onUsage?.({ inputTokens: 9, outputTokens: 1 });
           yield "Once ";

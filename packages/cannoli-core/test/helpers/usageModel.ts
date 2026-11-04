@@ -2,7 +2,11 @@
 // (on the result, and on the last streamed chunk) and records the signal
 // each call was given. No network.
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { AIMessage, AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  AIMessageChunk,
+  type BaseMessage,
+} from "@langchain/core/messages";
 import { ChatGenerationChunk, type ChatResult } from "@langchain/core/outputs";
 
 const usage = (input: number, output: number) => ({

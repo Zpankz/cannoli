@@ -1061,8 +1061,7 @@ export default class Cannoli extends Plugin {
       ...(!forBake
         ? {
             pLimit:
-              Number.isInteger(this.settings.pLimit) &&
-              this.settings.pLimit > 0
+              Number.isInteger(this.settings.pLimit) && this.settings.pLimit > 0
                 ? this.settings.pLimit
                 : DEFAULT_SETTINGS.pLimit,
           }
