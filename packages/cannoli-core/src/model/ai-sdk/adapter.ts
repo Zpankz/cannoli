@@ -15,6 +15,7 @@ import {
   type ToolChoice,
   type ToolSet,
 } from "ai";
+import { safeKeyName } from "../../utility";
 import type { GenericModelConfig } from "../../providers";
 import type { ModelPort } from "../port";
 import { apiIdFor } from "../registry";
@@ -220,9 +221,27 @@ function toolSetOf(req: GenerateRequest): ToolSet | undefined {
   if (!req.tools?.length) return undefined;
   const tools: ToolSet = {};
   for (const t of req.tools) {
+    // Legacy form edges read safeKeyName(label), as LangChain's formTool did.
+    // Keep arbitrary ModelPort tool schemas untouched.
+    const schema = t.inputSchema;
+    const inputSchema =
+      req.providerOptions?.langchain && t.name === "form"
+        ? {
+            ...schema,
+            properties: Object.fromEntries(
+              Object.entries(schema.properties ?? {}).map(([key, value]) => [
+                safeKeyName(key),
+                value,
+              ]),
+            ),
+            ...(Array.isArray(schema.required)
+              ? { required: schema.required.map(safeKeyName) }
+              : {}),
+          }
+        : schema;
     tools[t.name] = tool({
       ...(t.description ? { description: t.description } : {}),
-      inputSchema: jsonSchema(t.inputSchema as never),
+      inputSchema: jsonSchema(inputSchema as never),
     });
   }
   return tools;
@@ -361,7 +380,11 @@ export class AiSdkModelPort implements ModelPort {
         ...(legacy.baseURL && !keepsBaseURL ? { baseURL: legacy.baseURL } : {}),
       };
     }
-    const modelId = legacy?.model || apiIdFor(req.model, config.kind);
+    const modelId =
+      legacy?.model ||
+      apiIdFor(req.model, config.kind) ||
+      config.defaultModel ||
+      "";
     return { config, modelId };
   }
 
