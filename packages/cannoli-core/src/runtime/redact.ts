@@ -33,15 +33,19 @@ export function streamRedactor(
     let out = "";
     let i = 0;
     while (i < pending.length) {
+      const remainder = pending.slice(i);
+      if (
+        !final &&
+        pairs.some(
+          ([, value]) =>
+            value.length > remainder.length && value.startsWith(remainder),
+        )
+      )
+        break;
       const match = pairs.find(([, value]) => pending.startsWith(value, i));
       if (match) {
         out += `«secret:${match[0]}»`;
         i += match[1].length;
-      } else if (
-        !final &&
-        pairs.some(([, value]) => value.startsWith(pending.slice(i)))
-      ) {
-        break;
       } else out += pending[i++];
     }
     pending = pending.slice(i);
