@@ -248,6 +248,60 @@ describe("terminal races", () => {
     await tick();
   });
 
+  it("stops reset and startup immediately when a pending-status observer cancels", async () => {
+    const { run, events, seen } = setup();
+    run.graph.o.setText("keep until reset reaches this node");
+    let terminal: unknown;
+    run.onFinish = () => {
+      terminal = structuredClone(run.canvasData);
+    };
+    events.subscribe((e) => {
+      if (e.t === "node-status" && e.status === "pending") run.stop();
+    });
+    await run.start();
+    await tick();
+    expect(run.canvasData).toEqual(terminal);
+    expect(run.graph.o.text).toBe("keep until reset reaches this node");
+    expect(seen.at(-1)?.t).toBe("run-finish");
+  });
+
+  it("flushes an accepted redactor tail before another branch's terminal error", async () => {
+    const events = new RunEventBus();
+    const seen: RunEvent[] = [];
+    events.subscribe((e) => seen.push(e));
+    const run = new Run({
+      cannoli: structuredClone(canvas),
+      events,
+      secrets: { KEY: "abcabc" },
+    });
+    run.model = {
+      async generate() {
+        return result;
+      },
+      async *stream() {
+        yield { type: "usage", usage: result.usage! };
+        yield { type: "text-delta", text: "abc" };
+        await new Promise(() => {});
+      },
+    };
+    const stream = await run.callLLMStream(request);
+    if (typeof stream === "string" || stream instanceof Error)
+      throw new Error("expected stream");
+    const iterator = stream[Symbol.asyncIterator]();
+    expect(await iterator.next()).toMatchObject({ value: "abc" });
+    expect(seen.some((e) => e.t === "text-delta")).toBe(false);
+    run.nodeExecutionFailed(run.graph.c, new Error("another branch failed"));
+    await expect(iterator.next()).rejects.toBeDefined();
+    await tick();
+    expect(seen.slice(-3).map((e) => e.t)).toEqual([
+      "text-delta",
+      "model-finish",
+      "run-finish",
+    ]);
+    expect(seen.at(-3)).toMatchObject({ text: "abc" });
+    expect(seen.at(-1)).toMatchObject({ usage: result.usage, status: "error" });
+  });
+
   it("does not mutate graph output after terminal failure", async () => {
     const { run, seen } = setup();
     run.model = {

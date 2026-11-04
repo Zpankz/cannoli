@@ -540,6 +540,7 @@ export class Run {
 
     // Reset the graph
     this.reset();
+    if (this.stopTime !== null || this.callSignal.aborted) return;
 
     // Validate the graph
     this.validate();
@@ -567,6 +568,7 @@ export class Run {
 
     // Call execute on all root objects
     for (const object of Object.values(this.graph)) {
+      if (this.stopTime !== null || this.callSignal.aborted) return;
       if (object.dependencies.length === 0) {
         object.startExecution();
         executedObjectsCount++;
@@ -811,6 +813,7 @@ export class Run {
     // Call reset on all objects
     for (const object of Object.values(this.graph)) {
       object.reset();
+      if (this.stopTime !== null || this.callSignal.aborted) return;
     }
   }
 
@@ -918,6 +921,7 @@ export class Run {
       status,
       at: currentTime,
     });
+    if (this.stopTime !== null) return;
 
     switch (status) {
       case CannoliObjectStatus.Complete: {
@@ -1447,8 +1451,7 @@ export class Run {
             this.eventUsage[key] = (this.eventUsage[key] ?? 0) + tokens[key];
         }
         const tail = redact("", true);
-        if (tail && this.stopTime === null)
-          this.events.emit({ t: "text-delta", id, callId, text: tail });
+        if (tail) this.events.emit({ t: "text-delta", id, callId, text: tail });
         this.events.emit({
           t: "model-finish",
           id,

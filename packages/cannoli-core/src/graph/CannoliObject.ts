@@ -352,6 +352,8 @@ export class CannoliObject extends EventTarget {
    * an error stoppage; without this the error was lost and the run hung.
    */
   startExecution(): void {
+    if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+      return;
     this.execute().catch((error: unknown) => {
       this.run.nodeExecutionFailed(this, error);
     });
