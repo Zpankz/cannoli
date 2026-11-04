@@ -316,6 +316,45 @@ describe("controller", () => {
     expect(seen.signals).toHaveLength(0);
   });
 
+  it("a stop while a secret-in-prompt error is saved finishes the run once", async () => {
+    let release: () => void = () => {};
+    let saving: () => void = () => {};
+    const savingError = new Promise<void>((r) => (saving = r));
+    const persistor: Persistor = {
+      start: async () => {},
+      editNode: async () => {},
+      editEdge: async () => {},
+      // The lint's error write waits here; the stop lands meanwhile.
+      addError: () => {
+        saving();
+        return new Promise<void>((r) => (release = r));
+      },
+      addWarning: async () => {},
+      editOriginalParallelGroupLabel: async () => {},
+      setConfig: () => {},
+    };
+    const canvas = structuredClone(oneCall);
+    canvas.nodes[1].text = "Use the key {{MY_SECRET}} now";
+    const controller = new RunController();
+    const stoppages: string[] = [];
+    const run = new Run({
+      cannoli: canvas,
+      isMock: false,
+      persistor,
+      controller,
+      secrets: { MY_SECRET: "fixture-secret-value" },
+      onFinish: (s) => stoppages.push(s.reason),
+    });
+
+    const started = run.start();
+    await savingError;
+    controller.stop();
+    release();
+    await started;
+
+    expect(stoppages).toEqual(["user"]);
+  });
+
   it("a finished run removes its abort listener", async () => {
     const controller = new RunController();
     const added: unknown[] = [];
