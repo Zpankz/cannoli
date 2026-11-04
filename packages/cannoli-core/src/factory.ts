@@ -236,10 +236,25 @@ export class CannoliFactory {
       }
     });
 
+    // Nodes that will be in the graph. Red nodes have no cannoliData.
+    const verifiedNodeIds = new Set(
+      this.cannoliData.nodes
+        .filter((node) => !!node.cannoliData)
+        .map((node) => node.id),
+    );
+
     // Create the cannoli data object for each edge
     this.cannoliData.edges.forEach((edge) => {
       // Ignore red ("1") objects
       if (edge.color === "1") {
+        return;
+      }
+
+      // Drop edges into or out of an ignored node along with it.
+      if (
+        !verifiedNodeIds.has(edge.fromNode) ||
+        !verifiedNodeIds.has(edge.toNode)
+      ) {
         return;
       }
 
@@ -714,7 +729,10 @@ export class CannoliFactory {
     const duplicate = JSON.parse(JSON.stringify(data));
     duplicate.id = newId;
     if (setOriginalObject) {
-      duplicate.cannoliData.originalObject = data.id;
+      // A copy of a copy (nested parallel groups) still points at the object
+      // on the canvas, not at the intermediate copy.
+      duplicate.cannoliData.originalObject =
+        data.cannoliData?.originalObject ?? data.id;
     }
     return duplicate;
   }
