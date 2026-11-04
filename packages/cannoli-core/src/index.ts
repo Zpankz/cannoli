@@ -21,3 +21,16 @@ export * from "./serverClient";
 export * from "./secrets";
 export { lintSecretInPrompt, type Lint } from "./language/lints";
 export { redactSecrets } from "./runtime/redact";
+export * from "./model/types";
+export type { ModelPort, GoalAgentPort } from "./model/port";
+export { canRunGoalAgent } from "./model/port";
+export { LangchainModelPort } from "./model/langchain";
+export {
+  fromLegacyMessages,
+  fromLegacyParams,
+  fromLegacyResponse,
+  toLegacyMessages,
+  toLegacyParams,
+  toLegacyResponse,
+  toModelRef,
+} from "./model/legacy";

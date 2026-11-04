@@ -41,6 +41,14 @@ import {
 } from "./runtime/controller";
 import { warnExecutingNodes } from "./runtime/stop";
 import { recordCall, type TokenUsage } from "./runtime/usage";
+import { LangchainModelPort } from "./model/langchain";
+import {
+  fromLegacyParams,
+  toLegacyMessages,
+  toLegacyResponse,
+} from "./model/legacy";
+import { canRunGoalAgent, type ModelPort } from "./model/port";
+import type { ModelStreamEvent } from "./model/types";
 
 export interface HttpTemplate {
   id: string;
@@ -162,6 +170,31 @@ export function isValidKey(
  * Pass a stream through, calling release once it ends, fails or is closed
  * early by the consumer.
  */
+/**
+ * The text of a model stream, passing on usage as it arrives. `first` is the
+ * event already read, so a stream that fails to start fails the call.
+ */
+async function* streamText(
+  first: IteratorResult<ModelStreamEvent>,
+  events: AsyncIterator<ModelStreamEvent>,
+  onUsage: (usage: TokenUsage) => void,
+): AsyncGenerator<string> {
+  let next = first;
+  try {
+    while (!next.done) {
+      const event = next.value;
+      if (event.type === "text-delta") yield event.text;
+      else if (event.type === "usage") onUsage(event.usage);
+      else if (event.type === "finish" && event.result.usage) {
+        onUsage(event.result.usage);
+      } else if (event.type === "error") throw event.error;
+      next = await events.next();
+    }
+  } finally {
+    if (!next.done) void events.return?.()?.catch(() => {});
+  }
+}
+
 async function* releaseWhenDone<T>(
   stream: AsyncIterable<T>,
   release: () => void,
@@ -213,7 +246,10 @@ export class Run {
   actions: Action[] = [];
   httpTemplates: HttpTemplate[] = [];
   replacers: Replacer[] = [];
+  /** Builds legacy request configs; model calls go through `model`. */
   llm: Llm | null = null;
+  private modelOverride: ModelPort | null = null;
+  private langchainPort: LangchainModelPort | null = null;
   llmLimit: Limit = pLimit(1000);
   persistor: Persistor | null = null;
   isMock: boolean = false;
@@ -673,6 +709,23 @@ export class Run {
     }
   }
 
+  /**
+   * The port every model call goes through: by default `llm` wrapped as a
+   * LangchainModelPort, or the port assigned here.
+   */
+  get model(): ModelPort | null {
+    if (this.modelOverride) return this.modelOverride;
+    if (!this.llm || !this.llm.initialized) return null;
+    if (this.langchainPort?.llm !== this.llm) {
+      this.langchainPort = new LangchainModelPort(this.llm);
+    }
+    return this.langchainPort;
+  }
+
+  set model(port: ModelPort | null) {
+    this.modelOverride = port;
+  }
+
   getDefaultConfig() {
     return this.llm?.getConfig() ?? {};
   }
@@ -1001,7 +1054,8 @@ export class Run {
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
         // Only call LLM if we're not mocking
-        if (this.isMock || !this.llm || !this.llm.initialized) {
+        const model = this.model;
+        if (this.isMock || !model) {
           return this.createMockFunctionResponse(request);
         }
 
@@ -1009,15 +1063,11 @@ export class Run {
         // Catch any errors
         try {
           if (signal.aborted) throw signal.reason;
-          let tokens: TokenUsage | undefined;
-          const response = await raceAbort(
-            this.llm.getCompletion(request, {
-              signal,
-              onUsage: (u) => (tokens = u),
-            }),
+          const result = await raceAbort(
+            model.generate(fromLegacyParams(request, signal)),
             signal,
           );
-          const completion = response;
+          const completion = toLegacyResponse(result);
 
           if (verbose) {
             console.log(
@@ -1028,7 +1078,7 @@ export class Run {
             );
           }
 
-          recordCall(this.usage, request.model, tokens);
+          recordCall(this.usage, request.model, result.usage);
 
           invariant(completion, "No message returned");
 
@@ -1060,7 +1110,8 @@ export class Run {
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
         // Only call LLM if we're not mocking
-        if (this.isMock || !this.llm || !this.llm.initialized) {
+        const model = this.model;
+        if (this.isMock || !model) {
           return this.createMockFunctionResponse(request);
         }
 
@@ -1068,14 +1119,21 @@ export class Run {
         // Catch any errors
         try {
           if (signal.aborted) throw signal.reason;
-          const response = await raceAbort(
-            this.llm.getGoalCompletion(
-              { ...request, onReasoningMessagesUpdated },
-              { signal },
-            ),
+          if (!canRunGoalAgent(model)) {
+            throw new Error("Goal nodes need the LangChain model engine.");
+          }
+          const result = await raceAbort(
+            model.goal(fromLegacyParams(request, signal), {
+              onReasoningMessagesUpdated: onReasoningMessagesUpdated
+                ? (messages) =>
+                    onReasoningMessagesUpdated(
+                      toLegacyMessages(messages).messages,
+                    )
+                : undefined,
+            }),
             signal,
           );
-          const completion = response;
+          const completion = toLegacyResponse(result);
 
           if (verbose) {
             console.log(
@@ -1103,11 +1161,11 @@ export class Run {
 
   async callLLMStream(request: GenericCompletionParams) {
     request = redactRequest(request, this.secrets);
-    if (this.isMock || !this.llm || !this.llm.initialized) {
+    const model = this.model;
+    if (this.isMock || !model) {
       // Return mock stream
       return "Mock response";
     }
-    const llm = this.llm;
     const signal = this.controller.signal;
 
     // A streaming call holds its limiter slot until the stream ends, not just
@@ -1128,21 +1186,19 @@ export class Run {
     };
     signal.addEventListener("abort", finish, { once: true });
     this.openStreams.add(finish);
+    let events: AsyncIterator<ModelStreamEvent> | undefined;
     try {
       if (signal.aborted) throw signal.reason;
-      const response = await raceAbort(
-        llm.getCompletionStream(request, {
-          signal,
-          onUsage: (u) => (tokens = u),
-        }),
-        signal,
-      );
-
-      invariant(response, "No message returned");
+      events = model
+        .stream(fromLegacyParams(request, signal))
+        [Symbol.asyncIterator]();
+      const first = await raceAbort(events.next(), signal);
       started = true;
 
-      return abortableStream(releaseWhenDone(response, finish), signal);
+      const text = streamText(first, events, (u) => (tokens = u));
+      return abortableStream(releaseWhenDone(text, finish), signal);
     } catch (e) {
+      void events?.return?.()?.catch(() => {});
       finish();
       // A user stop rejects instead, so the node ends quietly.
       if (signal.aborted) throw signal.reason;
