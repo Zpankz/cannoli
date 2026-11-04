@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AiSdkModelPort } from "../../src/model/ai-sdk/adapter";
 import { providersFromLegacyConfigs } from "../../src/model/ai-sdk/providers";
 import { fromLegacyParams } from "../../src/model/legacy";
+import { LangchainModelPort } from "../../src/model/langchain";
 import { Run } from "../../src/run";
 import {
   chatChunks,
@@ -16,6 +17,34 @@ import { runCanvas } from "../helpers/run";
 const messages = [{ role: "user", content: "Hi" }];
 
 describe("legacy AI SDK compatibility on the wire", () => {
+  it("keeps an omitted-provider call on the configured Azure fallback", async () => {
+    const { fetch, requests } = ollamaFetch("unexpected");
+    const fallback = vi
+      .spyOn(LangchainModelPort.prototype, "generate")
+      .mockResolvedValue({ text: "azure", finishReason: "stop", messages: [] });
+    try {
+      const run = new Run({
+        cannoli: { nodes: [], edges: [] },
+        isMock: false,
+        providerEngine: "ai-sdk",
+        llmConfigs: [
+          { provider: "azure_openai", model: "azure-default", apiKey: "test" },
+          { provider: "openai", model: "gpt-4o", apiKey: "test" },
+        ],
+        modelFetch: fetch,
+      });
+      expect(await run.callLLM({ messages })).toMatchObject({
+        content: "azure",
+      });
+      expect(fallback).toHaveBeenCalledOnce();
+      expect(
+        fallback.mock.calls[0][0].providerOptions?.langchain,
+      ).toMatchObject({ provider: "azure_openai" });
+      expect(requests).toHaveLength(0);
+    } finally {
+      fallback.mockRestore();
+    }
+  });
   it.each([false, true])(
     "preserves OpenAI controls with stream=%s",
     async (stream) => {
@@ -102,9 +131,21 @@ describe("legacy AI SDK compatibility on the wire", () => {
           model: "configured:tag",
           baseURL: "http://localhost:11434",
         },
+        { provider: "openai", model: "gpt-4o", apiKey: "test" },
       ],
       modelFetch: fetch,
     });
+    expect(await run.callLLM({ messages })).toMatchObject({ content: "ok" });
+    const defaultStream = await run.callLLMStream({ messages });
+    if (defaultStream instanceof Error) throw defaultStream;
+    for await (const _chunk of defaultStream) {
+      /* drain */
+    }
+    expect(
+      requests
+        .slice(0, 2)
+        .every((r) => new URL(r.url).hostname === "localhost"),
+    ).toBe(true);
     expect(await run.callLLM({ provider: "ollama", messages })).toMatchObject({
       content: "ok",
     });
@@ -117,99 +158,132 @@ describe("legacy AI SDK compatibility on the wire", () => {
     expect(requests.map((r) => r.body.model)).toEqual([
       "configured:tag",
       "configured:tag",
+      "configured:tag",
+      "configured:tag",
       "override:tag",
     ]);
   });
 
-  it("serializes safe form fields and loads the original labeled edge", async () => {
-    const { fetch, requests } = fakeFetch((r) => {
-      const tools = r.body.tools as {
-        function: { parameters: { properties: Record<string, unknown> } };
-      }[];
-      const key = Object.keys(tools[0].function.parameters.properties)[0];
-      return jsonResponse(
-        chatCompletion(
-          {
-            content: "",
-            tool_calls: [
-              {
-                id: "f1",
-                type: "function",
-                function: {
-                  name: "form",
-                  arguments: JSON.stringify({ [key]: "Ada" }),
+  it.each([false, true])(
+    "serializes safe form fields and loads labeled edges with collisions=%s",
+    async (collision) => {
+      const { fetch, requests } = fakeFetch((r) => {
+        const tools = r.body.tools as {
+          function: { parameters: { properties: Record<string, unknown> } };
+        }[];
+        const key = Object.keys(tools[0].function.parameters.properties)[0];
+        return jsonResponse(
+          chatCompletion(
+            {
+              content: "",
+              tool_calls: [
+                {
+                  id: "f1",
+                  type: "function",
+                  function: {
+                    name: "form",
+                    arguments: JSON.stringify({ [key]: "Ada" }),
+                  },
                 },
+              ],
+            },
+            undefined,
+            "tool_calls",
+          ),
+        );
+      });
+      const { run, finished, stoppages } = await runCanvas(
+        {
+          nodes: [
+            {
+              id: "form",
+              type: "text",
+              text: "Fill the name",
+              x: 0,
+              y: 0,
+              width: 200,
+              height: 100,
+            },
+            {
+              id: "out",
+              type: "text",
+              text: "",
+              color: "6",
+              x: 400,
+              y: 0,
+              width: 200,
+              height: 100,
+            },
+            ...(collision
+              ? [
+                  {
+                    id: "out2",
+                    type: "text" as const,
+                    text: "",
+                    color: "6",
+                    x: 400,
+                    y: 200,
+                    width: 200,
+                    height: 100,
+                  },
+                ]
+              : []),
+          ],
+          edges: [
+            {
+              id: "field",
+              fromNode: "form",
+              fromSide: "right",
+              toNode: "out",
+              toSide: "left",
+              label: "First name",
+              color: "6",
+            },
+            ...(collision
+              ? [
+                  {
+                    id: "field2",
+                    fromNode: "form",
+                    fromSide: "right" as const,
+                    toNode: "out2",
+                    toSide: "left" as const,
+                    label: "First-name",
+                    color: "6",
+                  },
+                ]
+              : []),
+          ],
+        },
+        {
+          isMock: false,
+          runArgs: {
+            providerEngine: "ai-sdk",
+            llmConfigs: [
+              {
+                provider: "openai",
+                model: "gpt-4o",
+                apiKey: "test",
+                baseURL: "https://gateway.test/v1",
               },
             ],
+            modelFetch: fetch,
           },
-          undefined,
-          "tool_calls",
-        ),
+        },
       );
-    });
-    const { run, finished, stoppages } = await runCanvas(
-      {
-        nodes: [
-          {
-            id: "form",
-            type: "text",
-            text: "Fill the name",
-            x: 0,
-            y: 0,
-            width: 200,
-            height: 100,
-          },
-          {
-            id: "out",
-            type: "text",
-            text: "",
-            color: "6",
-            x: 400,
-            y: 0,
-            width: 200,
-            height: 100,
-          },
-        ],
-        edges: [
-          {
-            id: "field",
-            fromNode: "form",
-            fromSide: "right",
-            toNode: "out",
-            toSide: "left",
-            label: "First name",
-            color: "6",
-          },
-        ],
-      },
-      {
-        isMock: false,
-        runArgs: {
-          providerEngine: "ai-sdk",
-          llmConfigs: [
-            {
-              provider: "openai",
-              model: "gpt-4o",
-              apiKey: "test",
-              baseURL: "https://gateway.test/v1",
+      expect(finished).toBe(true);
+      expect(stoppages.map((s) => s.reason)).toEqual(["complete"]);
+      expect(requests[0].body.tools).toMatchObject([
+        {
+          function: {
+            parameters: {
+              properties: { First_name: { type: "string" } },
+              required: ["First_name"],
             },
-          ],
-          modelFetch: fetch,
-        },
-      },
-    );
-    expect(finished).toBe(true);
-    expect(stoppages.map((s) => s.reason)).toEqual(["complete"]);
-    expect(requests[0].body.tools).toMatchObject([
-      {
-        function: {
-          parameters: {
-            properties: { First_name: { type: "string" } },
-            required: ["First_name"],
           },
         },
-      },
-    ]);
-    expect(run.graph.out.text).toBe("Ada");
-  });
+      ]);
+      expect(run.graph.out.text).toBe("Ada");
+      if (collision) expect(run.graph.out2.text).toBe("Ada");
+    },
+  );
 });

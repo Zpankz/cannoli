@@ -235,7 +235,7 @@ function toolSetOf(req: GenerateRequest): ToolSet | undefined {
               ]),
             ),
             ...(Array.isArray(schema.required)
-              ? { required: schema.required.map(safeKeyName) }
+              ? { required: [...new Set(schema.required.map(safeKeyName))] }
               : {}),
           }
         : schema;
