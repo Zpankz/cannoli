@@ -9,7 +9,8 @@
     "version": "node version-bump.mjs && git add manifest.json versions.json",
     "build-college": "node scripts/fileGen.js",
     "release": "node scripts/release.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit --project test",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -25,7 +26,8 @@
     "eslint": "^8.57.0",
     "obsidian": "1.14.4",
     "tslib": "2.4.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@deablabs/cannoli-core": "workspace:*",
