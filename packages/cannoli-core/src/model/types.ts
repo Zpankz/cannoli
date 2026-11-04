@@ -55,6 +55,8 @@ export interface Usage {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens?: number;
+  /** Input tokens written to the provider's prompt cache. */
+  cacheWriteTokens?: number;
   reasoningTokens?: number;
   costUsd?: number | null;
 }

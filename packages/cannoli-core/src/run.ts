@@ -31,7 +31,11 @@ import { parseNamedNode } from "./utility";
 import { resultsRun } from "./cannoli";
 import { nanoid } from "nanoid";
 import { createRng, pick, seedFromCanvas, type Rng } from "./util/rng";
-import { type SecretResolver, toSecretResolver } from "./secrets";
+import {
+  type SecretResolver,
+  toSecretResolver,
+  withProviderKeys,
+} from "./secrets";
 import { lintSecretInPrompt } from "./language/lints";
 import { redactingPersistor, redactRequest } from "./runtime/redact";
 import {
@@ -41,6 +45,8 @@ import {
 } from "./runtime/controller";
 import { warnExecutingNodes } from "./runtime/stop";
 import { recordCall, type TokenUsage } from "./runtime/usage";
+import { AiSdkModelPort } from "./model/ai-sdk/adapter";
+import { providersFromLegacyConfigs } from "./model/ai-sdk/providers";
 import { LangchainModelPort } from "./model/langchain";
 import {
   fromLegacyParams,
@@ -231,6 +237,13 @@ export interface RunArgs {
     url: string;
     secret: string;
   };
+  /**
+   * Which engine calls models: the AI SDK (default), with LangChain taking
+   * what it can't serve, or LangChain alone.
+   */
+  providerEngine?: "ai-sdk" | "langchain";
+  /** The fetch AI SDK providers use, e.g. one that goes through the host. */
+  modelFetch?: typeof fetch;
 }
 
 export class Run {
@@ -241,6 +254,8 @@ export class Run {
   args: Record<string, string> | null;
   config: Record<string, unknown> | null;
   secrets: SecretResolver;
+  /** `secrets` plus the provider API keys: what persistence and requests redact. */
+  private readonly redactionSecrets: SecretResolver;
   fileManager: FileManager | null = null;
   fetcher: ResponseTextFetcher;
   actions: Action[] = [];
@@ -250,6 +265,10 @@ export class Run {
   llm: Llm | null = null;
   private modelOverride: ModelPort | null = null;
   private langchainPort: LangchainModelPort | null = null;
+  private aiSdkPort: AiSdkModelPort | null = null;
+  private readonly llmConfigs: LLMConfig[];
+  readonly providerEngine: "ai-sdk" | "langchain";
+  private readonly modelFetch?: typeof fetch;
   llmLimit: Limit = pLimit(1000);
   persistor: Persistor | null = null;
   isMock: boolean = false;
@@ -298,6 +317,8 @@ export class Run {
     cannoliServer,
     seed,
     controller,
+    providerEngine,
+    modelFetch,
   }: RunArgs) {
     this.onFinish = onFinish ?? ((stoppage: Stoppage) => {});
     this.controller = controller ?? new RunController();
@@ -307,8 +328,12 @@ export class Run {
     this.isMock = isMock ?? false;
     this.rng = createRng(seed ?? seedFromCanvas(cannoli));
     this.secrets = toSecretResolver(secrets);
+    this.llmConfigs = llmConfigs ?? [];
+    this.providerEngine = providerEngine ?? "ai-sdk";
+    this.modelFetch = modelFetch;
+    this.redactionSecrets = withProviderKeys(this.secrets, this.llmConfigs);
     this.persistor = persistor
-      ? redactingPersistor(persistor, this.secrets)
+      ? redactingPersistor(persistor, this.redactionSecrets)
       : null;
     this.usage = {};
     this.runId = `${nanoid(16)}${isMock ? "-mock" : ""}`;
@@ -440,6 +465,8 @@ export class Run {
         fetcher,
         replacers,
         controller: this.controller,
+        providerEngine: this.providerEngine,
+        modelFetch,
       });
     };
   }
@@ -709,18 +736,33 @@ export class Run {
     }
   }
 
-  /**
-   * The port every model call goes through: by default `llm` wrapped as a
-   * LangchainModelPort, or the port assigned here. Assigning null goes back
-   * to the default; null means no model only while `llm` is unset.
-   */
-  get model(): ModelPort | null {
-    if (this.modelOverride) return this.modelOverride;
+  /** `llm` as a LangchainModelPort, or null while `llm` is unset. */
+  private get langchainModel(): LangchainModelPort | null {
     if (!this.llm || !this.llm.initialized) return null;
     if (this.langchainPort?.llm !== this.llm) {
       this.langchainPort = new LangchainModelPort(this.llm);
+      this.aiSdkPort = null;
     }
     return this.langchainPort;
+  }
+
+  /**
+   * The port every model call goes through, or the port assigned here.
+   * By default: the AI SDK over the run's llmConfigs, falling back to `llm`
+   * as a LangchainModelPort; with providerEngine "langchain", that port
+   * alone. Assigning null goes back to the default; null means no model only
+   * while `llm` is unset.
+   */
+  get model(): ModelPort | null {
+    if (this.modelOverride) return this.modelOverride;
+    const langchain = this.langchainModel;
+    if (!langchain || this.providerEngine === "langchain") return langchain;
+    this.aiSdkPort ??= new AiSdkModelPort({
+      providers: providersFromLegacyConfigs(this.llmConfigs),
+      fetch: this.modelFetch,
+      fallback: langchain,
+    });
+    return this.aiSdkPort;
   }
 
   set model(port: ModelPort | null) {
@@ -1051,7 +1093,7 @@ export class Run {
     request: GenericCompletionParams,
     verbose?: boolean,
   ): Promise<GenericCompletionResponse | Error> {
-    request = redactRequest(request, this.secrets);
+    request = redactRequest(request, this.redactionSecrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
         // Only call LLM if we're not mocking
@@ -1107,7 +1149,7 @@ export class Run {
       messages: GenericCompletionResponse[],
     ) => void;
   }): Promise<GenericCompletionResponse | Error> {
-    request = redactRequest(request, this.secrets);
+    request = redactRequest(request, this.redactionSecrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
         // Only call LLM if we're not mocking
@@ -1120,11 +1162,13 @@ export class Run {
         // Catch any errors
         try {
           if (signal.aborted) throw signal.reason;
-          if (!canRunGoalAgent(model)) {
-            throw new Error("Goal nodes need the LangChain model engine.");
+          // Only the LangChain port runs the goal agent (until P3.6).
+          const agent = canRunGoalAgent(model) ? model : this.langchainModel;
+          if (!agent) {
+            throw new Error("Goal nodes need an LLM provider to be configured.");
           }
           const result = await raceAbort(
-            model.goal(fromLegacyParams(request, signal), {
+            agent.goal(fromLegacyParams(request, signal), {
               onReasoningMessagesUpdated: onReasoningMessagesUpdated
                 ? (messages) =>
                     onReasoningMessagesUpdated(
@@ -1161,7 +1205,7 @@ export class Run {
   }
 
   async callLLMStream(request: GenericCompletionParams) {
-    request = redactRequest(request, this.secrets);
+    request = redactRequest(request, this.redactionSecrets);
     const model = this.model;
     if (this.isMock || !model) {
       // Return mock stream

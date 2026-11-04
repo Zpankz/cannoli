@@ -345,6 +345,12 @@ export function migrateSettings(
     ...data,
   };
   let changed = false;
+  // Saved data from before the AI SDK engine keeps the engine it ran on.
+  const existing = Object.keys(data).length > 0;
+  if (existing && data.providerEngine === undefined) {
+    settings.providerEngine = "langchain";
+    changed = true;
+  }
   if (!Array.isArray(settings.secrets)) {
     settings.secrets = [];
     changed = true;

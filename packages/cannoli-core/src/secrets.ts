@@ -58,3 +58,32 @@ export function toSecretResolver(
   }
   return secretResolverFromRecord(secrets as Record<string, string>);
 }
+
+const hasOwn = (rec: Record<string, string>, key: string) =>
+  Object.prototype.hasOwnProperty.call(rec, key);
+
+/**
+ * `secrets` plus every non-empty provider API key from `llmConfigs`, named
+ * `provider-key-<provider>` (with `-2`, `-3`... for repeats), so redaction
+ * covers keys that never went through the resolver.
+ */
+export function withProviderKeys(
+  secrets: SecretResolver,
+  llmConfigs: { provider: string; apiKey?: string }[],
+): SecretResolver {
+  const keys: Record<string, string> = {};
+  for (const { provider, apiKey } of llmConfigs) {
+    if (!apiKey || apiKey.trim() === "") continue;
+    if (Object.values(keys).includes(apiKey)) continue;
+    let name = `provider-key-${provider}`;
+    for (let n = 2; hasOwn(keys, name); n++) {
+      name = `provider-key-${provider}-${n}`;
+    }
+    keys[name] = apiKey;
+  }
+  if (Object.keys(keys).length === 0) return secrets;
+  return {
+    get: (name) => secrets.get(name) ?? (hasOwn(keys, name) ? keys[name] : null),
+    names: () => [...new Set([...secrets.names(), ...Object.keys(keys)])],
+  };
+}

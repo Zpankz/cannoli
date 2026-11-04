@@ -38,6 +38,23 @@ export function createLLMSettings(
     });
 
   new Setting(containerEl)
+    .setName("Model engine")
+    .setDesc(
+      "The library that calls the models. Choose LangChain (legacy) to keep the old behaviour. Azure OpenAI and goal nodes use LangChain either way.",
+    )
+    .addDropdown((dropdown) => {
+      dropdown.addOption("ai-sdk", "AI SDK");
+      dropdown.addOption("langchain", "LangChain (legacy)");
+      dropdown.setValue(
+        plugin.settings.providerEngine ?? DEFAULT_SETTINGS.providerEngine,
+      );
+      dropdown.onChange(async (value) => {
+        plugin.settings.providerEngine = value as "ai-sdk" | "langchain";
+        await plugin.saveSettings();
+      });
+    });
+
+  new Setting(containerEl)
     .setName("LLM call concurrency limit (pLimit)")
     .setDesc(
       "The maximum number of LLM calls that can be made at once. Decrease this if you are running into rate limiting issues.",

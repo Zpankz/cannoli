@@ -53,6 +53,8 @@ export interface CannoliSettings {
   models: ModelRoles;
   concurrency: { pLimit: number; requestThreshold: number };
   network: { allow: string[]; allowLocalhost: boolean };
+  /** Which library calls the models. Installs from before it existed keep "langchain". */
+  providerEngine: "ai-sdk" | "langchain";
   /** SecretStorage ids for the non-provider keys. */
   valTownSecretId: string;
   exaSecretId: string;
@@ -160,6 +162,7 @@ export const DEFAULT_SETTINGS: CannoliSettings = {
   },
   concurrency: { pLimit: 50, requestThreshold: 20 },
   network: { allow: [], allowLocalhost: true },
+  providerEngine: "ai-sdk",
   valTownSecretId: "cannoli-secret-valtown-api-key",
   exaSecretId: "cannoli-secret-exa-api-key",
   cannoliServerSecretId: "cannoli-secret-cannoli-server",
