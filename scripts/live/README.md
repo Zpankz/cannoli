@@ -29,14 +29,14 @@ CDP_PORT=9349 CANVAS="College/1. Basics/1. Hello world.canvas" \
 3. records every notice shown, then waits for the run's final notice (`Cannoli complete:` / `… failed with the error:` / `Cannoli stopped:` / `… cancelled`) and for `runningCannolis` to be empty. After `RUN_TIMEOUT` it stops the run and fails;
 4. waits until the `.canvas` file stops changing (`SETTLE` ms), fits the canvas to the view and takes a screenshot;
 5. evaluates the expectations against the file on disk, prints one ✓/✗ line per check, and writes `runs/<canvas>-<time>.json` (outcome, notices, results, console errors, screenshot path);
-6. exits 0 on pass, 1 on fail, 2 on a usage or setup error.
+6. exits 0 on pass and 1 on fail, including harness failures once it is connected (plugin not loaded, canvas never synced, a CDP call timing out). It exits 2 on a usage error (bad env or expectations, canvas missing from the vault, no CDP) and when a setup step in `run-canvas.sh` fails. `smoke.sh` reports any non-zero exit as 1.
 
 The instance stays running after a run. Stop it with `CDP_PORT=… bash scripts/live/launch-isolated.sh quit`.
 
 | Env | Default | |
 |---|---|---|
 | `CANVAS` | (required) | vault-relative path |
-| `EXPECT` / `EXPECT_JSON` | none | expectations file / inline JSON. With none, the run only has to finish. |
+| `EXPECT` / `EXPECT_JSON` | none | expectations file / inline JSON. `run` defaults to `complete`, so with none the run has to finish without an error; set `"run": "error"` to expect a failure. |
 | `CMD` | `cannoli:start` | command id; the start command acts on the open canvas |
 | `WAIT_FOR` | `run` | `none`: just wait `SETTLE` ms after `CMD` (for commands that are not runs) |
 | `RUN_TIMEOUT` | `300` | seconds |

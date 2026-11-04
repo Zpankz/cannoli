@@ -5,7 +5,7 @@
 #          CDP_PORT=9349 bash scripts/live/run-canvas.sh
 # Env: SKIP_BUILD=1, SKIP_SEED=1 (keep the vault as is), plus everything run-canvas.ts reads
 # (EXPECT_JSON, CMD, WAIT_FOR, RUN_TIMEOUT, SETTLE, SHOT). Leaves the instance running.
-# Exit: 0 pass, 1 fail, 2 usage/setup error.
+# Exit: 0 pass, 1 fail (including harness failures in run-canvas.ts), 2 usage or setup-step error.
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 [ -n "${CANVAS:-}" ] || { echo "usage: CANVAS=<vault path> [EXPECT=file.json] $0" >&2; exit 2; }
