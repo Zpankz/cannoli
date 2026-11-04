@@ -14,6 +14,7 @@ import {
   HttpTemplate,
   ResponseTextFetcher,
 } from "src/run";
+import { withSignal } from "src/runtime/controller";
 import { z } from "zod";
 import { secretsToRecord } from "src/secrets";
 import { ContentNode } from "../ContentNode";
@@ -112,12 +113,10 @@ export class HttpNode extends ContentNode {
         action.argInfo[argName].category === "fetcher"
       ) {
         // ...carrying the run's signal, so a stop cancels the action's requests.
-        const { fetcher, controller } = this.run;
-        args[argName] = ((url: string, options: RequestInit = {}) =>
-          fetcher(url, {
-            ...options,
-            signal: controller.signal,
-          })) satisfies ResponseTextFetcher;
+        args[argName] = withSignal(
+          this.run.fetcher,
+          this.run.controller.signal,
+        ) satisfies ResponseTextFetcher;
         continue;
       }
 

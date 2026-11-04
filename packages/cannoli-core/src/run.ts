@@ -259,7 +259,7 @@ export class Run {
   }: RunArgs) {
     this.onFinish = onFinish ?? ((stoppage: Stoppage) => {});
     this.controller = controller ?? new RunController();
-    this.controller.signal.addEventListener("abort", () => this.stopped(), {
+    this.controller.signal.addEventListener("abort", this.onAbort, {
       once: true,
     });
     this.isMock = isMock ?? false;
@@ -419,6 +419,12 @@ export class Run {
     // Validate the graph
     this.validate();
 
+    // Stopped before it started (the abort event doesn't replay): run nothing.
+    if (this.controller.signal.aborted) {
+      this.stopped();
+      return;
+    }
+
     // Never send a secret value to an LLM: fail before any call executes.
     const secretLint = this.canvasData
       ? lintSecretInPrompt(this.canvasData, this.secrets.names())[0]
@@ -575,6 +581,8 @@ export class Run {
 
   private handleFinish(reason: StoppageReason, message?: string) {
     this.stopTime = Date.now();
+    // Sub-cannolis share the parent's controller; don't keep finished ones alive.
+    this.controller.signal.removeEventListener("abort", this.onAbort);
 
     this.onFinish({
       reason,
@@ -598,6 +606,8 @@ export class Run {
   stop() {
     this.controller.stop();
   }
+
+  private readonly onAbort = () => this.stopped();
 
   /** The controller aborted: mark what was running, then finish as stopped. */
   private stopped() {
