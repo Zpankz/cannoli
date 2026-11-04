@@ -282,6 +282,40 @@ describe("controller", () => {
     expect(seen.signals).toHaveLength(0);
   });
 
+  it("a stop during startup finishes the run once", async () => {
+    let release: () => void = () => {};
+    const persistor: Persistor = {
+      // Startup waits here; the stop lands meanwhile.
+      start: () => new Promise<void>((r) => (release = r)),
+      editNode: async () => {},
+      editEdge: async () => {},
+      addError: async () => {},
+      addWarning: async () => {},
+      editOriginalParallelGroupLabel: async () => {},
+      setConfig: () => {},
+    };
+    const { llm, seen } = hangingLlm();
+    const controller = new RunController();
+    const stoppages: string[] = [];
+    const run = new Run({
+      cannoli: structuredClone(oneCall),
+      isMock: false,
+      persistor,
+      controller,
+      onFinish: (s) => stoppages.push(s.reason),
+    });
+    run.llm = llm as unknown as Run["llm"];
+
+    const started = run.start();
+    controller.stop();
+    release();
+    await started;
+    await sleep(50);
+
+    expect(stoppages).toEqual(["user"]);
+    expect(seen.signals).toHaveLength(0);
+  });
+
   it("a finished run removes its abort listener", async () => {
     const controller = new RunController();
     const added: unknown[] = [];

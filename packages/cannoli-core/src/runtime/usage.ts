@@ -9,7 +9,10 @@ export interface TokenUsage {
 /** Options every provider call takes. */
 export interface CallOptions {
   signal?: AbortSignal;
-  /** Called once with the usage the provider reported, if it reported any. */
+  /**
+   * Called with the usage the provider reported, if it reported any. A stream
+   * may call it more than once with a running total; the latest one counts.
+   */
   onUsage?: (usage: TokenUsage) => void;
 }
 

@@ -1,5 +1,6 @@
 // Usage capture: the token counts a provider reports (LangChain usage_metadata,
 // streamed or not) are summed per model into the run's stoppage.usage.
+import { AIMessageChunk } from "@langchain/core/messages";
 import { describe, expect, it } from "vitest";
 import { LLMProvider, type GenericCompletionParams } from "../../src/providers";
 import { Run } from "../../src/run";
@@ -107,6 +108,33 @@ describe("usage", () => {
       { inputTokens: 4, outputTokens: 2 },
       { inputTokens: 6, outputTokens: 3 },
     ]);
+  });
+
+  it("a stream stopped early still reports the usage already received", async () => {
+    const llm = new LLMProvider({
+      configs: [{ provider: "ollama", model: "fake" }],
+    });
+    // Input tokens arrive on the first chunk, as some providers send them.
+    llm.getChatClient = () =>
+      ({
+        stream: async () =>
+          (async function* () {
+            yield new AIMessageChunk({
+              content: "Once ",
+              usage_metadata: { input_tokens: 9, output_tokens: 0, total_tokens: 9 },
+            });
+            yield new AIMessageChunk({ content: "upon" });
+          })(),
+      }) as unknown as ReturnType<LLMProvider["getChatClient"]>;
+
+    const reported: TokenUsage[] = [];
+    const stream = await llm.getCompletionStream(
+      { messages: [{ role: "user", content: "hi" }] },
+      { onUsage: (u) => reported.push(u) },
+    );
+    for await (const _ of stream) break; // the consumer stops after one chunk
+
+    expect(reported.at(-1)).toEqual({ inputTokens: 9, outputTokens: 0 });
   });
 
   it("usage summed per run", async () => {
