@@ -1,9 +1,10 @@
 // usage: bun scripts/live/seed-vault.ts
 // Creates (or resets) the live test vault under .scratch/live/vault: seed canvases plus
 // Cannoli settings for the local Ollama provider (no API key). Re-running rewrites the seed
-// canvases, so runs always start from empty output nodes; other vault files are left alone.
-// Env: CANNOLI_LIVE_DIR (default <repo>/.scratch/live), OLLAMA_URL, OLLAMA_MODEL.
-import { mkdirSync, existsSync } from "node:fs";
+// canvases, so runs always start from empty output nodes; other vault files are left alone,
+// except College/, which is reset to the Cannoli College assets (see the end of this file).
+// Env: CANNOLI_LIVE_DIR (default <repo>/.scratch/live), OLLAMA_URL, OLLAMA_MODEL, SEED_COLLEGE.
+import { mkdirSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 const root = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
@@ -141,3 +142,34 @@ console.log(
     ollamaModel,
   }),
 );
+
+// ---- College: the 36 Cannoli College canvases (plus their example notes) under College/ ----
+// Source: packages/cannoli-plugin/assets/Cannoli College. Runs mutate canvases, so every seed
+// rewrites each file from the source and deletes anything else under College/ (pristine reset).
+// Env: SEED_COLLEGE=0 skips this section.
+if (process.env.SEED_COLLEGE !== "0") {
+  const src = join(root, "packages/cannoli-plugin/assets/Cannoli College");
+  const dest = join(vault, "College");
+  const walk = (dir: string, rel = ""): string[] =>
+    readdirSync(join(dir, rel), { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory()
+        ? walk(dir, join(rel, e.name))
+        : e.name === ".DS_Store"
+          ? []
+          : [join(rel, e.name)],
+    );
+  const files = walk(src);
+  for (const f of files) {
+    mkdirSync(join(dest, f, ".."), { recursive: true });
+    await Bun.write(join(dest, f), Bun.file(join(src, f)));
+  }
+  const keep = new Set(files);
+  for (const f of walk(dest)) if (!keep.has(f)) rmSync(join(dest, f));
+  console.log(
+    JSON.stringify({
+      college: dest,
+      canvases: files.filter((f) => f.endsWith(".canvas")).length,
+      files: files.length,
+    }),
+  );
+}

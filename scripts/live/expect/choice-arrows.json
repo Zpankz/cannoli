@@ -1,0 +1,30 @@
+{
+	"run": "complete",
+	"nodes": [
+		{
+			"node": "Should I make pasta tonight?",
+			"status": "complete"
+		},
+		{
+			"node": "What's the most difficult pasta to make?",
+			"status": "complete"
+		},
+		{
+			"node": "e82cc2675ee6f4ac",
+			"textMatches": "/rigatoni|linguini/i"
+		},
+		{
+			"node": "Which pasta is better for a red sauce?",
+			"status": "complete"
+		},
+		{
+			"node": "Write a shopping list based on this recipe: {{a}}",
+			"status": "complete"
+		},
+		{
+			"node": "676ea6885c79b682",
+			"textMatches": "\\S",
+			"color": "6"
+		}
+	]
+}

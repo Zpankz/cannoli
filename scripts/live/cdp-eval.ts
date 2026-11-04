@@ -94,6 +94,9 @@ if (process.env.ENABLE) {
     await app.plugins.loadManifests();
     if (!app.plugins.enabledPlugins.has(${ID}) || !app.plugins.plugins[${ID}]) await app.plugins.enablePluginAndSave(${ID});
     document.querySelectorAll(".modal-container .modal-close-button").forEach(b => b.click());
+    // Obsidian 1.14 opens Settings in a popout window that the click above can't reach. Left
+    // open, it stays activeWindow, and every Notice renders there instead of the main window.
+    app.setting?.close?.();
     return { restrictedOff: app.plugins.isEnabled(), loaded: !!app.plugins.plugins[${ID}] };`,
   );
   console.log("ENABLE", JSON.stringify(v));

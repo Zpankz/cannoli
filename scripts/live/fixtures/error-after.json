@@ -1,0 +1,13 @@
+{
+	"nodes": [
+		{ "id": "prompt", "type": "text", "text": "Say hi in 3 words", "x": 0, "y": 0, "width": 260, "height": 120, "color": "6" },
+		{ "id": "call", "type": "text", "text": "", "x": 360, "y": 0, "width": 260, "height": 120 },
+		{ "id": "output", "type": "text", "text": "", "x": 720, "y": 0, "width": 260, "height": 120, "color": "6" },
+		{ "id": "a1b2c3d4e5f60718", "type": "text", "text": "<u>Error:</u>\nmodel \"nope\" not found", "x": 670, "y": -15, "width": 500, "height": 150, "color": "1" }
+	],
+	"edges": [
+		{ "id": "e1", "fromNode": "prompt", "fromSide": "right", "toNode": "call", "toSide": "left" },
+		{ "id": "e2", "fromNode": "call", "fromSide": "right", "toNode": "output", "toSide": "left" },
+		{ "id": "f0e1d2c3b4a59687", "fromNode": "call", "fromSide": "right", "toNode": "a1b2c3d4e5f60718", "toSide": "left", "fromEnd": "none", "toEnd": "none", "color": "1" }
+	]
+}
