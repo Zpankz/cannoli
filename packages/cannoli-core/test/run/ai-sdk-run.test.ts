@@ -10,7 +10,11 @@ import { runCanvas } from "../helpers/run";
 
 const box = { width: 200, height: 100 };
 const ollama = [
-  { provider: "ollama", model: "qwen3.5:4b", baseURL: "http://localhost:11434" },
+  {
+    provider: "ollama" as const,
+    model: "qwen3.5:4b",
+    baseURL: "http://localhost:11434",
+  },
 ];
 
 /** prompt → call → content */
@@ -150,7 +154,15 @@ describe("runs on the AI SDK engine", () => {
             y: 0,
             ...box,
           },
-          { id: "out", type: "text", text: "", color: "6", x: 800, y: 0, ...box },
+          {
+            id: "out",
+            type: "text",
+            text: "",
+            color: "6",
+            x: 800,
+            y: 0,
+            ...box,
+          },
         ],
         edges: [
           {

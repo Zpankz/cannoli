@@ -5,7 +5,7 @@ import {
   redactRequest,
   redactSecrets,
 } from "../src/runtime/redact";
-import { secretResolverFromRecord } from "../src/secrets";
+import { secretResolverFromRecord, withProviderKeys } from "../src/secrets";
 import { runCanvas } from "./helpers/run";
 
 const box = { x: 0, y: 0, width: 200, height: 100 };
@@ -36,6 +36,19 @@ afterEach(() => {
 });
 
 describe("redaction", () => {
+  it("redacts provider keys even when their synthetic name is already a user secret", () => {
+    const secrets = withProviderKeys(
+      secretResolverFromRecord({ "provider-key-ollama": "user-secret-value" }),
+      [{ provider: "ollama", apiKey: "provider-secret-value" }],
+    );
+    const redacted = redactSecrets(
+      "user-secret-value provider-secret-value",
+      secrets,
+    );
+    expect(redacted).toBe(
+      "«secret:provider-key-ollama» «secret:provider-key-ollama-2»",
+    );
+  });
   it("redactRequest redacts tool schemas without mutating the input", () => {
     const secrets = secretResolverFromRecord({ MY_SECRET: "hunter2-secret" });
     const request = {

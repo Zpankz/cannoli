@@ -1,3 +1,4 @@
+import { makeObsidianFetch } from "./fetch";
 import {
   Notice,
   Plugin,
@@ -1250,6 +1251,11 @@ export default class Cannoli extends Plugin {
     const [validationStoppagePromise] = run({
       cannoli: canvasData,
       llmConfigs: llmConfigs,
+      providerEngine: this.settings.providerEngine,
+      modelFetch: makeObsidianFetch({
+        onStreamingUnavailable: () =>
+          new Notice("Model streaming unavailable; using a buffered response."),
+      }),
       actions: actions,
       httpTemplates: this.settings.httpTemplates,
       replacers: replacers,
@@ -1306,6 +1312,11 @@ export default class Cannoli extends Plugin {
       controller,
       cannoli: canvasData,
       llmConfigs: llmConfigs,
+      providerEngine: this.settings.providerEngine,
+      modelFetch: makeObsidianFetch({
+        onStreamingUnavailable: () =>
+          new Notice("Model streaming unavailable; using a buffered response."),
+      }),
       actions: actions,
       httpTemplates: this.settings.httpTemplates,
       replacers: replacers,

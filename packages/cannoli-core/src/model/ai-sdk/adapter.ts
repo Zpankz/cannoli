@@ -67,6 +67,7 @@ function textOf(content: Message["content"]): string {
 async function imagePart(
   part: Extract<ContentPart, { type: "image" }>,
   fetch: typeof globalThis.fetch,
+  signal?: AbortSignal,
 ): Promise<Part> {
   const data = typeof part.data === "string" ? part.data : part.data.href;
   const dataUrl = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(data);
@@ -79,7 +80,7 @@ async function imagePart(
     };
   }
   if (/^https?:\/\//i.test(data)) {
-    const response = await fetch(data);
+    const response = await fetch(data, { signal });
     if (!response.ok) {
       throw new Error(`Could not fetch image ${data}: ${response.status}`);
     }
@@ -94,9 +95,7 @@ async function imagePart(
   return { type: "file", data, mediaType: part.mediaType };
 }
 
-function toolResultOutput(
-  part: Extract<ContentPart, { type: "tool-result" }>,
-) {
+function toolResultOutput(part: Extract<ContentPart, { type: "tool-result" }>) {
   const { output, isError } = part;
   if (typeof output === "string") {
     return isError
@@ -123,6 +122,7 @@ function toolCallOf(part: ToolCallPart): Part {
 async function toModelMessage(
   m: Message,
   fetch: typeof globalThis.fetch,
+  signal?: AbortSignal,
 ): Promise<ModelMessage> {
   const providerOptions = sdkProviderOptions(m.providerOptions);
   const extra = providerOptions ? { providerOptions } : {};
@@ -141,7 +141,7 @@ async function toModelMessage(
         parts.push({ type: "text", text: part.text });
         break;
       case "image":
-        if (m.role === "user") parts.push(await imagePart(part, fetch));
+        if (m.role === "user") parts.push(await imagePart(part, fetch, signal));
         break;
       case "file":
         parts.push({
@@ -195,7 +195,7 @@ export async function toAiSdkPrompt(
   fetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<AiSdkPrompt> {
   const messages = await Promise.all(
-    req.messages.map((m) => toModelMessage(m, fetch)),
+    req.messages.map((m) => toModelMessage(m, fetch, req.signal)),
   );
   const top: SystemModelMessage[] = req.instructions
     ? [{ role: "system", content: req.instructions }]
@@ -358,9 +358,7 @@ export class AiSdkModelPort implements ModelPort {
       config = {
         ...config,
         ...(legacy.apiKey ? { apiKey: legacy.apiKey } : {}),
-        ...(legacy.baseURL && !keepsBaseURL
-          ? { baseURL: legacy.baseURL }
-          : {}),
+        ...(legacy.baseURL && !keepsBaseURL ? { baseURL: legacy.baseURL } : {}),
       };
     }
     const modelId = legacy?.model || apiIdFor(req.model, config.kind);
@@ -418,7 +416,7 @@ export class AiSdkModelPort implements ModelPort {
       throw this.noProvider(req);
     }
     const result = await generateText(await this.callOptions(req, model));
-    const usage = toUsage(result.totalUsage);
+    const usage = toUsage(result.usage);
     return {
       text: result.text,
       messages: fromModelMessages(result.responseMessages),
@@ -471,7 +469,8 @@ export class AiSdkModelPort implements ModelPort {
         case "abort":
           yield {
             type: "error",
-            error: req.signal.reason ?? new Error("The model call was stopped."),
+            error:
+              req.signal.reason ?? new Error("The model call was stopped."),
           };
           return;
         case "finish": {

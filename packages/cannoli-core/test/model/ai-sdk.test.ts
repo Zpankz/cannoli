@@ -248,7 +248,9 @@ describe("AiSdkModelPort", () => {
         { role: "user", content: "Again" },
       ]),
     );
-    expect(mid.instructions).toEqual([{ role: "system", content: "Be brief." }]);
+    expect(mid.instructions).toEqual([
+      { role: "system", content: "Be brief." },
+    ]);
     expect(mid.allowSystemInMessages).toBe(true);
     expect(mid.messages[2]).toEqual({
       role: "system",
@@ -432,7 +434,10 @@ describe("AiSdkModelPort", () => {
         finishReason: "stop",
         usage: { inputTokens: 7, outputTokens: 3 },
         messages: [
-          { role: "assistant", content: [{ type: "text", text: "Hello there" }] },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Hello there" }],
+          },
         ],
       },
     });
@@ -552,9 +557,9 @@ describe("AiSdkModelPort", () => {
       }),
     );
     expect(requests[0].url).toBe("https://api.anthropic.com/v1/messages");
-    expect(requests[0].headers["anthropic-dangerous-direct-browser-access"]).toBe(
-      "true",
-    );
+    expect(
+      requests[0].headers["anthropic-dangerous-direct-browser-access"],
+    ).toBe("true");
     expect(requests[0].headers["x-api-key"]).toBe("sk-test");
     expect(requests[0].body.model).toBe("claude-sonnet-5-5");
   });
@@ -625,4 +630,36 @@ describe("MockModelPort", () => {
     ]);
     expect(events.at(-1)).toEqual({ type: "finish", result: a });
   });
+});
+
+it("image URL downloads use the injected fetch and call abort signal", async () => {
+  const controller = new AbortController();
+  const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+    expect(init?.signal).toBe(controller.signal);
+    return new Response(new Uint8Array([1, 2, 3]), {
+      headers: { "content-type": "image/png" },
+    });
+  });
+  const prompt = await toAiSdkPrompt(
+    req(
+      [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              data: "https://image.test/picture.png",
+              mediaType: "image/png",
+            },
+          ],
+        },
+      ],
+      { signal: controller.signal },
+    ),
+    fetch,
+  );
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(prompt.messages[0].content).toEqual([
+    { type: "file", data: new Uint8Array([1, 2, 3]), mediaType: "image/png" },
+  ]);
 });

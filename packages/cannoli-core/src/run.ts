@@ -1165,7 +1165,9 @@ export class Run {
           // Only the LangChain port runs the goal agent (until P3.6).
           const agent = canRunGoalAgent(model) ? model : this.langchainModel;
           if (!agent) {
-            throw new Error("Goal nodes need an LLM provider to be configured.");
+            throw new Error(
+              "Goal nodes need an LLM provider to be configured.",
+            );
           }
           const result = await raceAbort(
             agent.goal(fromLegacyParams(request, signal), {
