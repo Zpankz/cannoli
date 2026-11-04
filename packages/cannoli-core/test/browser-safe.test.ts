@@ -134,8 +134,8 @@ describe("browser-safe", () => {
     });
 
     // Third-party code still pulls in Buffer, process, `global` and `path` even after
-    // LangChain is gone (e.g. ollama, tiny-invariant, semver, whatwg-fetch, protobufjs,
-    // @opentelemetry). This case stays expected-fail until an allowlist of
+    // LangChain is gone (e.g. ollama, tiny-invariant, semver, whatwg-fetch). This case
+    // stays expected-fail until an allowlist of
     // `typeof`-guarded references is added; don't flip it when dependencies change.
     it.fails("has no node builtins", () => {
       expect(result!.findings).toEqual([]);

@@ -32,7 +32,6 @@ export type SupportedProviders =
 
 import { z } from "zod";
 import invariant from "tiny-invariant";
-import { TracingConfig } from "src/run";
 import { Runnable } from "@langchain/core/runnables";
 
 import { loadMcpTools } from "./langchain/mcpTools";
@@ -41,6 +40,7 @@ import { makeCannoliServerClient } from "./serverClient";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StructuredToolInterface } from "@langchain/core/tools";
+import { untraced, tracingBlocker } from "./langchain/noTracing";
 import { BaseCallbackHandler } from "node_modules/@langchain/core/dist/callbacks/base";
 
 export const GenericFunctionCallSchema = z.object({
@@ -96,7 +96,6 @@ export type LLMConfig = Omit<GenericModelConfig, "provider"> & {
 
 type ConstructorArgs = {
   configs: LLMConfig[];
-  tracingConfig?: TracingConfig | null;
   valtownApiKey?: string;
   runId?: string;
   runName?: string;
@@ -146,7 +145,6 @@ export class LLMProvider {
   getDefaultConfigByProvider?: GetDefaultsByProvider;
   initialized = false;
   valtownApiKey?: string;
-  tracingConfig?: TracingConfig | null;
   runId?: string;
   runName?: string;
   runDateEpochMs?: number;
@@ -167,7 +165,6 @@ export class LLMProvider {
     this.cannoliServerUrl = initArgs.cannoliServerUrl;
     this.cannoliServerSecret = initArgs.cannoliServerSecret;
     this.valtownApiKey = initArgs.valtownApiKey;
-    this.tracingConfig = initArgs.tracingConfig;
     this.runId = initArgs.runId;
     this.runDateEpochMs = initArgs.runDateEpochMs;
     this.runName = initArgs.runName;
@@ -445,7 +442,7 @@ export class LLMProvider {
     } else {
       const content = await this.clientWithMetadata(client)
         .pipe(stringParser)
-        .invoke(convertedMessages);
+        .invoke(convertedMessages, untraced());
 
       return {
         role: "assistant", // optional when functions included
@@ -496,8 +493,10 @@ export class LLMProvider {
             }
           : undefined,
       ) ?? _client;
-    const response =
-      await this.clientWithMetadata(client).invoke(convertedMessages);
+    const response = await this.clientWithMetadata(client).invoke(
+      convertedMessages,
+      untraced(),
+    );
 
     return {
       role: "assistant",
@@ -520,7 +519,9 @@ export class LLMProvider {
     });
 
     const convertedMessages = LLMProvider.convertMessages(messages);
-    const stream = await client.pipe(stringParser).stream(convertedMessages);
+    const stream = await client
+      .pipe(stringParser)
+      .stream(convertedMessages, untraced());
 
     return stream;
   };
@@ -631,6 +632,7 @@ export class LLMProvider {
         },
         {
           callbacks: [
+            tracingBlocker(),
             {
               handleChatModelStart(
                 llm,

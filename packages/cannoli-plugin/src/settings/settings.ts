@@ -3,7 +3,6 @@ import {
   BakeRuntime,
   HttpTemplate,
   SupportedProviders,
-  TracingConfig,
 } from "@deablabs/cannoli-core";
 
 export interface CannoliSettings {
@@ -54,7 +53,6 @@ export interface CannoliSettings {
   enableVision: boolean;
   secrets: { name: string; value: string; visibility: string }[];
   onlyRunCannoliGroups: boolean;
-  tracingConfig: NonNullable<TracingConfig>;
   cannoliServerEnabled: boolean;
   cannoliServerUrl: string;
   cannoliServerSecret: string;
@@ -107,14 +105,6 @@ export const DEFAULT_SETTINGS: CannoliSettings = {
   secrets: [],
   enableVision: true,
   onlyRunCannoliGroups: false,
-  tracingConfig: {
-    phoenix: {
-      enabled: false,
-      projectName: "cannoli",
-      baseUrl: "http://localhost:6006/",
-      apiKey: "",
-    },
-  },
   cannoliServerEnabled: false,
   cannoliServerUrl: "http://localhost:3333",
   cannoliServerSecret: "",
