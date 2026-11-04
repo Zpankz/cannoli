@@ -82,7 +82,7 @@ export class CallNode extends CannoliNode {
     );
 
     if (chatResponseEdges.length > 0) {
-      const stream = await this.run.callLLMStream(request);
+      const stream = await this.run.callLLMStream(request, this.id);
 
       if (stream instanceof Error) {
         this.error(`Error calling LLM:\n${stream.message}`);
@@ -138,7 +138,7 @@ export class CallNode extends CannoliNode {
       // After the stream is done, load the outgoing edges
       this.loadOutgoingEdges(messageContent, request);
     } else {
-      const message = await this.run.callLLM(request);
+      const message = await this.run.callLLM(request, undefined, this.id);
 
       if (message instanceof Error) {
         this.error(`Error calling LLM:\n${message.message}`);

@@ -38,7 +38,13 @@ import {
   withProviderKeys,
 } from "./secrets";
 import { lintSecretInPrompt } from "./language/lints";
-import { redactingPersistor, redactRequest } from "./runtime/redact";
+import {
+  redactingPersistor,
+  redactRequest,
+  streamRedactor,
+} from "./runtime/redact";
+import { BatchedPersistor } from "./runtime/batched-persistor";
+import { RunEventBus } from "./runtime/events";
 import {
   RunController,
   abortableStream,
@@ -55,7 +61,7 @@ import {
   toLegacyResponse,
 } from "./model/legacy";
 import { canRunGoalAgent, type ModelPort } from "./model/port";
-import type { ModelStreamEvent } from "./model/types";
+import type { ModelStreamEvent, GenerateRequest, Usage } from "./model/types";
 
 export interface HttpTemplate {
   id: string;
@@ -181,13 +187,16 @@ async function* streamText(
   first: IteratorResult<ModelStreamEvent>,
   events: AsyncIterator<ModelStreamEvent>,
   onUsage: (usage: TokenUsage) => void,
+  onText: (text: string) => void,
 ): AsyncGenerator<string> {
   let next = first;
   try {
     while (!next.done) {
       const event = next.value;
-      if (event.type === "text-delta") yield event.text;
-      else if (event.type === "usage") onUsage(event.usage);
+      if (event.type === "text-delta") {
+        onText(event.text);
+        yield event.text;
+      } else if (event.type === "usage") onUsage(event.usage);
       else if (event.type === "finish" && event.result.usage) {
         onUsage(event.result.usage);
       } else if (event.type === "error") throw event.error;
@@ -214,6 +223,9 @@ async function* releaseWhenDone<T>(
 }
 
 export interface RunArgs {
+  /** Subscribe before start(). Events carry redacted prompts and output. */
+  events?: RunEventBus;
+  canvasPath?: string;
   cannoli: unknown;
   llmConfigs?: LLMConfig[];
   fetcher?: ResponseTextFetcher;
@@ -248,6 +260,12 @@ export interface RunArgs {
 }
 
 export class Run {
+  readonly events: RunEventBus;
+  private readonly canvasPath: string;
+  /** Stable FNV-1a canvas fingerprint, not a cryptographic integrity check. */
+  private readonly canvasHash: string;
+  private began = false;
+  private readonly eventUsage: Usage = { inputTokens: 0, outputTokens: 0 };
   graph: Record<string, CannoliObject> = {};
   onFinish: (stoppage: Stoppage) => void;
   canvasData: VerifiedCannoliCanvasData | null = null;
@@ -320,8 +338,13 @@ export class Run {
     controller,
     providerEngine,
     modelFetch,
+    events,
+    canvasPath,
   }: RunArgs) {
     this.onFinish = onFinish ?? ((stoppage: Stoppage) => {});
+    this.events = events ?? new RunEventBus();
+    this.canvasPath = canvasPath ?? "";
+    this.canvasHash = seedFromCanvas(cannoli).toString(16).padStart(8, "0");
     this.controller = controller ?? new RunController();
     this.controller.signal.addEventListener("abort", this.onAbort, {
       once: true,
@@ -334,7 +357,12 @@ export class Run {
     this.modelFetch = modelFetch;
     this.redactionSecrets = withProviderKeys(this.secrets, this.llmConfigs);
     this.persistor = persistor
-      ? redactingPersistor(persistor, this.redactionSecrets)
+      ? redactingPersistor(
+          persistor instanceof BatchedPersistor
+            ? persistor
+            : new BatchedPersistor(persistor),
+          this.redactionSecrets,
+        )
       : null;
     this.usage = {};
     this.runId = `${nanoid(16)}${isMock ? "-mock" : ""}`;
@@ -473,11 +501,17 @@ export class Run {
   }
 
   async start() {
+    this.begin();
     // Log the graph
     // this.logGraph();
 
     if (this.persistor !== null && this.canvasData !== null) {
-      await this.persistor.start(JSON.parse(JSON.stringify(this.canvasData)));
+      try {
+        await this.persistor.start(JSON.parse(JSON.stringify(this.canvasData)));
+      } catch {
+        this.handleFinish("error", "Could not initialize canvas persistence.");
+        return;
+      }
     }
 
     // Stopped before or during startup: run nothing. A stop during the await
@@ -502,7 +536,14 @@ export class Run {
       ? lintSecretInPrompt(this.canvasData, this.secrets.names())[0]
       : undefined;
     if (secretLint) {
+      this.events.emit({ t: "lint", lint: secretLint });
       await this.persistor?.addError(secretLint.nodeId, secretLint.message);
+      try {
+        await this.persistor?.flush?.();
+      } catch {
+        this.handleFinish("error", "Could not persist the lint diagnostic.");
+        return;
+      }
       // A stop during the write has already finished the run.
       if (!this.stopTime) this.handleFinish("error", secretLint.message);
       return;
@@ -652,23 +693,58 @@ export class Run {
     return undefined;
   }
 
+  private begin() {
+    if (this.began) return;
+    this.began = true;
+    this.events.emit({
+      t: "run-start",
+      runId: this.runId,
+      canvasPath: this.canvasPath,
+      canvasHash: this.canvasHash,
+      at: Date.now(),
+    });
+  }
+
   private handleFinish(reason: StoppageReason, message?: string) {
+    if (this.stopTime !== null) return;
+    this.begin();
     this.stopTime = Date.now();
     // Sub-cannolis share the parent's controller; don't keep finished ones alive.
     this.controller.signal.removeEventListener("abort", this.onAbort);
 
-    this.onFinish({
-      reason,
-      message,
-      results: this.getResults(),
-      argNames: this.getArgNames(),
-      resultNames: this.getResultNames(),
-      actionsOrHttpTemplatesReferenced:
-        this.getActionsOrHttpTemplatesReferenced(),
-      providersReferenced: this.getProvidersReferenced(),
-      description: this.getDescription(),
-      usage: this.usage,
-    });
+    const finish = (failure?: unknown) => {
+      if (failure) {
+        reason = "error";
+        message = "Could not persist the final canvas state.";
+      }
+      this.events.emit({
+        t: "run-finish",
+        status:
+          reason === "complete"
+            ? "completed"
+            : reason === "user"
+              ? "stopped"
+              : "error",
+        usage: { ...this.eventUsage },
+        costUsd: null,
+        at: Date.now(),
+      });
+      this.onFinish({
+        reason,
+        message,
+        results: this.getResults(),
+        argNames: this.getArgNames(),
+        resultNames: this.getResultNames(),
+        actionsOrHttpTemplatesReferenced:
+          this.getActionsOrHttpTemplatesReferenced(),
+        providersReferenced: this.getProvidersReferenced(),
+        description: this.getDescription(),
+        usage: this.usage,
+      });
+    };
+    if (this.persistor?.flush)
+      void this.persistor.flush().then(() => finish(), finish);
+    else finish();
   }
 
   error(message: string) {
@@ -794,12 +870,13 @@ export class Run {
     message?: string,
   ) {
     const currentTime = Date.now();
-    if (this.stopTime) {
-      const elapsed = currentTime - this.stopTime;
-      if (elapsed > 10) {
-        return;
-      }
-    }
+    if (this.stopTime !== null) return;
+    this.events.emit({
+      t: "node-status",
+      id: object.id,
+      status,
+      at: currentTime,
+    });
 
     switch (status) {
       case CannoliObjectStatus.Complete: {
@@ -1107,26 +1184,24 @@ export class Run {
   async callLLM(
     request: GenericCompletionParams,
     verbose?: boolean,
+    nodeId = "",
   ): Promise<GenericCompletionResponse | Error> {
     request = redactRequest(request, this.redactionSecrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
-        // Only call LLM if we're not mocking
-        const model = this.model;
-        if (this.isMock || !model) {
-          return this.createMockFunctionResponse(request);
-        }
-
         const signal = this.controller.signal;
-        // Catch any errors
+        let call: ReturnType<Run["observeCall"]> | undefined;
         try {
           if (signal.aborted) throw signal.reason;
-          const result = await raceAbort(
-            model.generate(
-              fromLegacyParams(this.modelRequest(request), signal),
-            ),
-            signal,
-          );
+          const input = fromLegacyParams(this.modelRequest(request), signal);
+          call = this.observeCall(input, nodeId);
+          const model = this.model;
+          if (this.isMock || !model) {
+            const result = this.createMockFunctionResponse(request);
+            call.finish();
+            return result;
+          }
+          const result = await raceAbort(model.generate(input), signal);
           const completion = toLegacyResponse(result);
 
           if (verbose) {
@@ -1139,11 +1214,13 @@ export class Run {
           }
 
           recordCall(this.usage, request.model, result.usage);
+          call.finish(result.usage, result.ttftMs);
 
           invariant(completion, "No message returned");
 
           return completion;
         } catch (e) {
+          call?.finish();
           // A user stop rejects instead, so the node ends quietly.
           if (signal.aborted) throw signal.reason;
           return e as Error;
@@ -1155,10 +1232,12 @@ export class Run {
   async callGoalAgent({
     request,
     verbose,
+    nodeId = "",
     onReasoningMessagesUpdated,
   }: {
     request: GenericCompletionParams;
     verbose?: boolean;
+    nodeId?: string;
     /**
      * Called for each message that is created during the reasoning process
      */
@@ -1169,16 +1248,18 @@ export class Run {
     request = redactRequest(request, this.redactionSecrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
-        // Only call LLM if we're not mocking
-        const model = this.model;
-        if (this.isMock || !model) {
-          return this.createMockFunctionResponse(request);
-        }
-
         const signal = this.controller.signal;
-        // Catch any errors
+        let call: ReturnType<Run["observeCall"]> | undefined;
         try {
           if (signal.aborted) throw signal.reason;
+          const input = fromLegacyParams(request, signal);
+          call = this.observeCall(input, nodeId);
+          const model = this.model;
+          if (this.isMock || !model) {
+            const result = this.createMockFunctionResponse(request);
+            call.finish();
+            return result;
+          }
           // Only the LangChain port runs the goal agent (until P3.6).
           const agent = canRunGoalAgent(model) ? model : this.langchainModel;
           if (!agent) {
@@ -1187,7 +1268,7 @@ export class Run {
             );
           }
           const result = await raceAbort(
-            agent.goal(fromLegacyParams(request, signal), {
+            agent.goal(input, {
               onReasoningMessagesUpdated: onReasoningMessagesUpdated
                 ? (messages) =>
                     onReasoningMessagesUpdated(
@@ -1210,11 +1291,13 @@ export class Run {
 
           // An agent makes several model calls; their tokens aren't summed yet.
           recordCall(this.usage, request.model);
+          call.finish(result.usage, result.ttftMs);
 
           invariant(completion, "No message returned");
 
           return completion;
         } catch (e) {
+          call?.finish();
           // A user stop rejects instead, so the node ends quietly.
           if (signal.aborted) throw signal.reason;
           return e as Error;
@@ -1223,15 +1306,20 @@ export class Run {
     );
   }
 
-  async callLLMStream(request: GenericCompletionParams) {
+  async callLLMStream(request: GenericCompletionParams, nodeId = "") {
+    const signal = this.controller.signal;
+    if (signal.aborted) throw signal.reason;
     request = redactRequest(request, this.redactionSecrets);
     const model = this.model;
     if (this.isMock || !model) {
-      // Return mock stream
+      const call = this.observeCall(
+        fromLegacyParams(request, this.controller.signal),
+        nodeId,
+      );
+      call.text("Mock response");
+      call.finish();
       return "Mock response";
     }
-    const signal = this.controller.signal;
-
     // A streaming call holds its limiter slot until the stream ends, not just
     // until the stream object is returned (DESIGN §11.5). A stop frees it at
     // once: the provider's stream may not notice the abort until its next chunk.
@@ -1239,6 +1327,7 @@ export class Run {
     let tokens: TokenUsage | undefined;
     let started = false;
     let done = false;
+    let call: ReturnType<Run["observeCall"]> | undefined;
     const finish = () => {
       if (done) return;
       done = true;
@@ -1247,19 +1336,20 @@ export class Run {
       acquired();
       // Like callLLM, count calls that got a response, even a partial one.
       if (started) recordCall(this.usage, request.model, tokens);
+      call?.finish(tokens);
     };
     signal.addEventListener("abort", finish, { once: true });
     this.openStreams.add(finish);
     let events: AsyncIterator<ModelStreamEvent> | undefined;
     try {
       if (signal.aborted) throw signal.reason;
-      events = model
-        .stream(fromLegacyParams(this.modelRequest(request), signal))
-        [Symbol.asyncIterator]();
+      const input = fromLegacyParams(this.modelRequest(request), signal);
+      call = this.observeCall(input, nodeId);
+      events = model.stream(input)[Symbol.asyncIterator]();
       const first = await raceAbort(events.next(), signal);
       started = true;
 
-      const text = streamText(first, events, (u) => (tokens = u));
+      const text = streamText(first, events, (u) => (tokens = u), call.text);
       return abortableStream(releaseWhenDone(text, finish), signal);
     } catch (e) {
       void events?.return?.()?.catch(() => {});
@@ -1268,6 +1358,64 @@ export class Run {
       if (signal.aborted) throw signal.reason;
       return e as Error;
     }
+  }
+
+  /** Observe calls without allowing subscribers or split credentials into the engine path. */
+  private observeCall(input: GenerateRequest, id: string) {
+    this.begin();
+    const callId = nanoid(16);
+    const at = Date.now();
+    const redact = streamRedactor(this.redactionSecrets);
+    let ttftMs: number | undefined;
+    let done = false;
+    this.events.emit({
+      t: "model-request",
+      id,
+      callId,
+      model: input.model,
+      messages: [
+        ...(input.instructions
+          ? [{ role: "system" as const, content: input.instructions }]
+          : []),
+        ...input.messages,
+      ],
+      tools: input.tools?.map((t) => t.name),
+    });
+    const text = (part: string) => {
+      if (done || this.stopTime !== null) return;
+      ttftMs ??= Date.now() - at;
+      const safe = redact(part);
+      if (safe) this.events.emit({ t: "text-delta", id, callId, text: safe });
+    };
+    const finish = (usage?: Usage, firstTokenMs?: number) => {
+      if (done) return;
+      done = true;
+      this.openStreams.delete(finish);
+      const tail = redact("", true);
+      if (tail && this.stopTime === null)
+        this.events.emit({ t: "text-delta", id, callId, text: tail });
+      const tokens = usage ?? { inputTokens: 0, outputTokens: 0 };
+      this.eventUsage.inputTokens += tokens.inputTokens;
+      this.eventUsage.outputTokens += tokens.outputTokens;
+      for (const key of [
+        "cachedInputTokens",
+        "cacheWriteTokens",
+        "reasoningTokens",
+      ] as const) {
+        if (tokens[key] !== undefined)
+          this.eventUsage[key] = (this.eventUsage[key] ?? 0) + tokens[key];
+      }
+      this.events.emit({
+        t: "model-finish",
+        id,
+        callId,
+        usage: tokens,
+        ttftMs: firstTokenMs ?? ttftMs,
+        ms: Date.now() - at,
+      });
+    };
+    this.openStreams.add(finish);
+    return { text, finish };
   }
 
   /** Wait for a free limiter slot; call the returned function to free it. */

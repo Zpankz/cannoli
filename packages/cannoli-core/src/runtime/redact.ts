@@ -22,6 +22,33 @@ export function redactSecrets(text: string, secrets: SecretResolver): string {
   return redactText(text, secretPairs(secrets));
 }
 
+/** Hold a possible credential prefix so chunk boundaries cannot bypass redaction. */
+export function streamRedactor(
+  secrets: SecretResolver,
+): (text: string, final?: boolean) => string {
+  const pairs = secretPairs(secrets);
+  let pending = "";
+  return (text, final = false) => {
+    pending += text;
+    let out = "";
+    let i = 0;
+    while (i < pending.length) {
+      const match = pairs.find(([, value]) => pending.startsWith(value, i));
+      if (match) {
+        out += `«secret:${match[0]}»`;
+        i += match[1].length;
+      } else if (
+        !final &&
+        pairs.some(([, value]) => value.startsWith(pending.slice(i)))
+      ) {
+        break;
+      } else out += pending[i++];
+    }
+    pending = pending.slice(i);
+    return out;
+  };
+}
+
 function redactText(text: string, pairs: SecretPairs): string {
   if (pairs.length === 0 || text === "") return text;
 
@@ -138,6 +165,36 @@ export function redactingPersistor(
 ): Persistor {
   const text = (value: string) => redactText(value, secretPairs(secrets));
   return {
+    ...(persistor.flush ? { flush: () => persistor.flush!() } : {}),
+    ...(persistor.applyBatch
+      ? {
+          applyBatch: (
+            edits: Parameters<NonNullable<Persistor["applyBatch"]>>[0],
+          ) => {
+            const pairs = secretPairs(secrets);
+            return persistor.applyBatch!(
+              edits.map((edit) => {
+                switch (edit.type) {
+                  case "node":
+                    return {
+                      ...edit,
+                      node: redactCanvasObject(edit.node, pairs),
+                    };
+                  case "edge":
+                    return {
+                      ...edit,
+                      edge: redactCanvasObject(edit.edge, pairs),
+                    };
+                  case "label":
+                    return { ...edit, label: text(edit.label) };
+                  default:
+                    return { ...edit, message: text(edit.message) };
+                }
+              }),
+            );
+          },
+        }
+      : {}),
     start: (canvasData) => {
       const pairs = secretPairs(secrets);
       return persistor.start({

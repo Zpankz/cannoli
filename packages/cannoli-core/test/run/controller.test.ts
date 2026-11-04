@@ -345,13 +345,20 @@ describe("controller", () => {
     canvas.nodes[1].text = "Use the key {{MY_SECRET}} now";
     const controller = new RunController();
     const stoppages: string[] = [];
+    let resolveFinished = () => {};
+    const finished = new Promise<void>((resolve) => {
+      resolveFinished = resolve;
+    });
     const run = new Run({
       cannoli: canvas,
       isMock: false,
       persistor,
       controller,
       secrets: { MY_SECRET: "fixture-secret-value" },
-      onFinish: (s) => stoppages.push(s.reason),
+      onFinish: (s) => {
+        stoppages.push(s.reason);
+        resolveFinished();
+      },
     });
 
     const started = run.start();
@@ -359,6 +366,7 @@ describe("controller", () => {
     controller.stop();
     release();
     await started;
+    await finished;
 
     expect(stoppages).toEqual(["user"]);
   });

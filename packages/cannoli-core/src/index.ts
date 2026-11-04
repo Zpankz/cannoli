@@ -6,6 +6,8 @@ export * from "./run";
 export * from "./graph/objects/vertices/CannoliNode";
 export * from "./cannoli";
 export { RunController, StopError } from "./runtime/controller";
+export { RunEventBus, type RunEvent } from "./runtime/events";
+export { BatchedPersistor } from "./runtime/batched-persistor";
 export type { CallOptions, TokenUsage } from "./runtime/usage";
 export { bake, callCannoliFunction, parseCannoliFunctionInfo } from "./bake";
 export type {

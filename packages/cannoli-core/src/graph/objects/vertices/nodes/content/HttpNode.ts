@@ -388,6 +388,7 @@ export class HttpNode extends ContentNode {
       content = mcpContent;
 
       const response = await this.run.callGoalAgent({
+        nodeId: this.id,
         request: { messages: [{ role: "user", content }] },
         onReasoningMessagesUpdated: (messages) => {
           this.setText(
