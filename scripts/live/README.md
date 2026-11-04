@@ -6,7 +6,7 @@ All mutable state lives in `<repo>/.scratch/live/` (git-ignored; override with `
 
 | Path | What |
 |---|---|
-| `vault/` | test vault: `Smoke/*.canvas`, `College/**` (the Cannoli College), `.obsidian/plugins/cannoli/` |
+| `vault/` | test vault: `Smoke/*.canvas`, `Cannoli College/**`, `.obsidian/plugins/cannoli/` |
 | `obsidian-userdata/` | Obsidian `--user-data-dir` for the isolated instance |
 | `shots/` | screenshots |
 | `runs/` | one JSON report per `run-canvas` run |
@@ -18,7 +18,7 @@ Needs: `bun`, `pnpm`, Obsidian.app, and Ollama serving the model (default `qwen3
 ## Run a canvas and check the result
 
 ```sh
-CDP_PORT=9349 CANVAS="College/1. Basics/1. Hello world.canvas" \
+CDP_PORT=9349 CANVAS="Cannoli College/1. Basics/1. Hello world.canvas" \
   EXPECT=scripts/live/expect/hello-world.json bash scripts/live/run-canvas.sh
 ```
 
@@ -52,7 +52,7 @@ An expectations file is a JSON object (or just the `nodes` array):
 
 ```json
 {
-  "canvas": "College/1. Basics/1. Hello world.canvas",
+  "canvas": "Cannoli College/1. Basics/1. Hello world.canvas",
   "description": "the hello-world run fills its output node",
   "run": "complete",
   "nodes": [
@@ -88,7 +88,7 @@ Unit tests: `pnpm test:live-unit` (= `bun test scripts/live`). Shared expectatio
 ## Seeded content (`seed-vault.ts`)
 
 - `Smoke/hello.canvas`, `Smoke/variable.canvas`: minimal call/content canvases.
-- `College/**`: all 36 Cannoli College canvases plus `Example notes/`, copied from `packages/cannoli-plugin/assets/Cannoli College`. Every seed rewrites each file and deletes other files under `College/`, so runs always start from pristine canvases. Notes that a canvas writes elsewhere in the vault are left alone. Set `SEED_COLLEGE=0` to skip this.
+- `Cannoli College/**`: all 36 Cannoli College canvases plus `Example notes/`, copied from `packages/cannoli-plugin/assets/Cannoli College` into the folder name the plugin itself uses, so the file nodes' embedded `Cannoli College/…` paths resolve. Every seed rewrites each file and deletes other files under `Cannoli College/`, so runs always start from pristine canvases. Notes that a canvas writes elsewhere in the vault are left alone. Set `SEED_COLLEGE=0` to skip this.
 - `.obsidian/plugins/cannoli/data.json`: Ollama provider (`OLLAMA_URL`, `OLLAMA_MODEL`), keeping any other existing settings.
 
 ## Other tools
