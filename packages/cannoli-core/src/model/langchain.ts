@@ -1,6 +1,7 @@
 // LangchainModelPort: the existing LLMProvider behind ModelPort (DESIGN §4.2,
 // P1.2). It converts each request back to the legacy shape and calls
 // LLMProvider unchanged. P5.2 deletes it with the LangChain paths.
+import type { ModelFetch } from "./fetch";
 import type { LLMProvider } from "../providers";
 import {
   fromLegacyMessages,
@@ -17,7 +18,14 @@ import type {
 } from "./types";
 
 export class LangchainModelPort implements GoalAgentPort {
-  constructor(readonly llm: LLMProvider) {}
+  /**
+   * Keep the run's SDK transport available to host replacements of this port.
+   * The stock legacy provider still owns its LangChain clients and transport.
+   */
+  constructor(
+    readonly llm: LLMProvider,
+    readonly modelFetch?: ModelFetch,
+  ) {}
 
   async generate(req: GenerateRequest): Promise<GenerateResult> {
     let usage: Usage | undefined;

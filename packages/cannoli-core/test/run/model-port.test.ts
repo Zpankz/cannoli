@@ -1,6 +1,8 @@
 // Run calls models only through ModelPort (DESIGN §4.2, P1.2). These drive
 // Run.callLLMStream with a port assigned to run.model.
 import { describe, expect, it } from "vitest";
+import { LangchainModelPort } from "../../src/model/langchain";
+import type { ModelFetch } from "../../src/model/fetch";
 import type { ModelPort } from "../../src/model/port";
 import type { ModelStreamEvent } from "../../src/model/types";
 import type { GenericCompletionParams } from "../../src/providers";
@@ -129,5 +131,29 @@ describe("Run with a ModelPort", () => {
       sleep(500).then(() => "slot still held"),
     ]);
     expect(fresh).toBe("fresh");
+  });
+});
+
+// Host builds may replace the compatibility port with an SDK-only implementation.
+// The constructor must receive the same explicit transport as the default SDK port.
+describe("compatibility port transport context", () => {
+  it("keeps distinct run transports on their corresponding fallback ports", () => {
+    const fetchA: ModelFetch = async () => new Response("A");
+    const fetchB: ModelFetch = async () => new Response("B");
+    const make = (modelFetch?: ModelFetch) =>
+      new Run({
+        cannoli,
+        providerEngine: "langchain",
+        modelFetch,
+        llmConfigs: [{ provider: "openai", model: "fake", apiKey: "fake-key" }],
+      });
+    const a = make(fetchA).model;
+    const b = make(fetchB).model;
+    const defaultPort = make().model;
+    expect(a).toBeInstanceOf(LangchainModelPort);
+    expect(b).toBeInstanceOf(LangchainModelPort);
+    expect((a as LangchainModelPort).modelFetch).toBe(fetchA);
+    expect((b as LangchainModelPort).modelFetch).toBe(fetchB);
+    expect((defaultPort as LangchainModelPort).modelFetch).toBeUndefined();
   });
 });
