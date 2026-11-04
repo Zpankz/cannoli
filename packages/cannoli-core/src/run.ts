@@ -914,6 +914,9 @@ export class Run {
   ) {
     const currentTime = Date.now();
     if (this.stopTime !== null) return;
+    // This state is already accepted by the graph. Keep it even if an
+    // observer stops the run before the status handler can continue.
+    this.updateObject(object);
     this.events.emit({
       t: "node-status",
       id: object.id,

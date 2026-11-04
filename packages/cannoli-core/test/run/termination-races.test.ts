@@ -392,6 +392,50 @@ describe("terminal races", () => {
     run.stop();
   });
 
+  it("persists accepted output when its complete observer cancels", async () => {
+    const events = new RunEventBus();
+    const persisted = new Map<string, unknown>();
+    let finish = () => {};
+    const done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const persistor: Persistor = {
+      async start() {},
+      async editNode(node) {
+        persisted.set(node.id, structuredClone(node));
+      },
+      async editEdge() {},
+      async addError() {},
+      async addWarning() {},
+      async editOriginalParallelGroupLabel() {},
+      setConfig() {},
+    };
+    const run = new Run({
+      cannoli: structuredClone(canvas),
+      events,
+      persistor,
+      llmConfigs: [{ provider: "ollama", model: "fake" }],
+      onFinish: () => finish(),
+    });
+    run.model = {
+      async generate() {
+        return result;
+      },
+      async *stream() {},
+    };
+    events.subscribe((e) => {
+      if (e.t === "node-status" && e.id === "o" && e.status === "complete")
+        run.stop();
+    });
+    await run.start();
+    await done;
+    expect(run.graph.o.text).toBe("ok");
+    expect(persisted.get("o")).toMatchObject({
+      text: "ok",
+      cannoliData: { status: "complete" },
+    });
+  });
+
   it("does not mutate graph output after terminal failure", async () => {
     const { run, seen } = setup();
     run.model = {
