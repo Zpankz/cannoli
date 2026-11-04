@@ -5,28 +5,23 @@
       "reason": "error",
       "message": "Could not get HTTP template with name \"[valtown-eval]\n45 + 62\" from floating nodes or pre-set templates.",
       "results": {},
-      "usage": {
-        "mock-model": {
-          "numberOfCalls": 1,
-          "promptTokens": 57.25
-        }
-      }
+      "usage": {}
     }
   ],
   "statuses": {
     "426db25be12ba40f": "complete",
-    "49b6ae2b97ed3a38": "complete",
+    "49b6ae2b97ed3a38": "pending",
     "50b7d8d43e23789d": "pending",
     "6ef4d0c132d7d762": "complete",
-    "7a11cb94f7d0a8d9": "complete",
-    "8a0f1fa1e0365f15": "error",
+    "7a11cb94f7d0a8d9": "executing",
+    "8a0f1fa1e0365f15": "pending",
     "9499a9b78e4f5769": "pending",
-    "a7b3b55a2c457ab1": "complete",
+    "a7b3b55a2c457ab1": "pending",
     "c3dcd82eb0f1017b": "error",
     "d70989613dcd001b": "complete",
     "dae97d54e71fc555": "pending",
     "dbfc20e9c20d4ed0": "pending",
-    "e263ee8a71eb7e5d": "complete",
+    "e263ee8a71eb7e5d": "pending",
     "eadd2c38885af3d9": "complete",
     "f13dcc3d02c075e0": "complete",
     "f8a5be321df2fbec": "complete"
@@ -63,8 +58,8 @@
           "kind": "node",
           "originalObject": null,
           "references": [],
-          "status": "complete",
-          "text": "Mock response",
+          "status": "pending",
+          "text": "",
           "type": "output"
         },
         "color": "6",
@@ -116,11 +111,11 @@
           "kind": "node",
           "originalObject": null,
           "references": [],
-          "status": "complete",
+          "status": "executing",
           "text": "Calculate the first 50 numbers in the Fibonacci sequence\n\nEnsure your code is valid JavaScript or TypeScript which directly returns a result by using immediately invoked function expressions or top-level return statements.",
           "type": "standard-call"
         },
-        "color": "4",
+        "color": "3",
         "id": "7a11cb94f7d0a8d9",
         "type": "text"
       },
@@ -135,7 +130,7 @@
           "kind": "node",
           "originalObject": null,
           "references": [],
-          "status": "error",
+          "status": "pending",
           "text": "valtown-eval",
           "type": "http"
         },
@@ -253,7 +248,6 @@
       {
         "cannoliData": {
           "addMessages": false,
-          "content": "Mock response",
           "crossingInGroups": [],
           "crossingOutGroups": [],
           "dependencies": [
@@ -262,7 +256,7 @@
           "isReflexive": false,
           "kind": "edge",
           "originalObject": null,
-          "status": "complete",
+          "status": "pending",
           "text": "code",
           "type": "variable"
         },
@@ -314,7 +308,6 @@
       {
         "cannoliData": {
           "addMessages": false,
-          "content": "Mock response",
           "crossingInGroups": [],
           "crossingOutGroups": [],
           "dependencies": [
@@ -323,7 +316,7 @@
           "isReflexive": false,
           "kind": "edge",
           "originalObject": null,
-          "status": "complete",
+          "status": "pending",
           "text": "",
           "type": "write"
         },

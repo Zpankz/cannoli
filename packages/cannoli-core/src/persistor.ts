@@ -182,7 +182,18 @@ export const canvasDataSchema = z.object({
 
 export type CanvasData = z.infer<typeof canvasDataSchema>;
 
+/** A single flush, in order. Node/edge edits update existing objects only. */
+export type PersistorEdit =
+  | { type: "node"; node: AllVerifiedCannoliCanvasNodeData }
+  | { type: "edge"; edge: VerifiedCannoliCanvasEdgeData }
+  | { type: "error" | "warning"; id: string; message: string }
+  | { type: "label"; id: string; label: string };
+
 export interface Persistor {
+  /** Hosts can atomically apply a flush instead of rewriting once per edit. */
+  applyBatch?(edits: readonly PersistorEdit[]): Promise<void>;
+  /** Resolve only when queued edits are durable; reject on persistence failure. */
+  flush?(): Promise<void>;
   start(canvasData: VerifiedCannoliCanvasData): Promise<void>;
   editNode(newNode: AllVerifiedCannoliCanvasNodeData): Promise<void>;
   editEdge(newEdge: VerifiedCannoliCanvasEdgeData): Promise<void>;

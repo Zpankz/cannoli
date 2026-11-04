@@ -1310,6 +1310,7 @@ export default class Cannoli extends Plugin {
     const controller = new RunController();
     const [liveStoppagePromise] = run({
       controller,
+      canvasPath: file.path,
       cannoli: canvasData,
       llmConfigs: llmConfigs,
       providerEngine: this.settings.providerEngine,

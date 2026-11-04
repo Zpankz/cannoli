@@ -4,6 +4,8 @@ import {
   redactingPersistor,
   redactRequest,
   redactSecrets,
+  redactEventData,
+  streamRedactor,
 } from "../src/runtime/redact";
 import { secretResolverFromRecord, withProviderKeys } from "../src/secrets";
 import { runCanvas } from "./helpers/run";
@@ -36,6 +38,56 @@ afterEach(() => {
 });
 
 describe("redaction", () => {
+  it("uses the longest secret independently of every chunk partition", () => {
+    const secrets = secretResolverFromRecord({
+      LONG: "abcdefghi",
+      SHORT: "abcdef",
+    });
+    const value = "abcdefghi";
+    for (let mask = 0; mask < 256; mask++) {
+      const redact = streamRedactor(secrets);
+      let output = "",
+        start = 0;
+      for (let i = 1; i < value.length; i++) {
+        if (mask & (1 << (i - 1))) {
+          output += redact(value.slice(start, i));
+          start = i;
+        }
+      }
+      output += redact(value.slice(start)) + redact("", true);
+      expect(output).toBe(redactSecrets(value, secrets));
+    }
+  });
+
+  it("flushes a shorter secret at EOF or when a longer prefix no longer matches", () => {
+    const secrets = secretResolverFromRecord({
+      LONG: "abcdefghi",
+      SHORT: "abcdef",
+    });
+    const eof = streamRedactor(secrets);
+    expect(eof("abcdef")).toBe("");
+    expect(eof("", true)).toBe("«secret:SHORT»");
+    const broken = streamRedactor(secrets);
+    expect(broken("abcdef")).toBe("");
+    expect(broken("!")).toBe("«secret:SHORT»!");
+  });
+
+  it("redacts URL objects and nested event metadata without mutating transport data", () => {
+    const url = new URL("https://example.test/image?key=secret-credential");
+    const original = {
+      image: url,
+      metadata: { nested: [{ token: "secret-credential" }] },
+    };
+    const copy = redactEventData(
+      original,
+      secretResolverFromRecord({ KEY: "secret-credential" }),
+    );
+    expect(copy.image).toBe("https://example.test/image?key=«secret:KEY»");
+    expect(copy.metadata.nested[0].token).toBe("«secret:KEY»");
+    expect(original.image.href).toContain("secret-credential");
+    expect(original.metadata.nested[0].token).toBe("secret-credential");
+  });
+
   it("redacts provider keys even when their synthetic name is already a user secret", () => {
     const secrets = withProviderKeys(
       secretResolverFromRecord({ "provider-key-ollama": "user-secret-value" }),

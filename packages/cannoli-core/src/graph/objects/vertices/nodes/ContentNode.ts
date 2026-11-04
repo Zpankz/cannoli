@@ -82,6 +82,8 @@ export class ContentNode extends CannoliNode {
 
   async execute(): Promise<void> {
     this.executing();
+    if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+      return;
 
     let content = this.getWriteOrLoggingContent();
 
@@ -98,6 +100,8 @@ export class ContentNode extends CannoliNode {
       content = await this.processReferences();
     }
 
+    if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+      return;
     content = this.filterName(content);
 
     // A chat-response edge carries one streamed chunk at a time: append it,

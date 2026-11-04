@@ -81,6 +81,56 @@ The bundle budget is the 2.3.3 `main.js` size. Change `maxBytes` in
 mobile has no Node) and lists any Node built-in imports or Node-only globals (`Buffer`,
 `process`, ...). Its cases are marked `it.fails` while known uses remain.
 
+## Run events and persistence
+
+Core exports `RunEventBus`, `RunEvent`, `BatchedPersistor`, and `PersistorEdit`.
+Subscribe before starting a run; the returned function unsubscribes. Each observer
+receives its own event copy, and observer failures cannot interrupt execution.
+Reentrant emissions queue until all observers receive the current event, keeping
+request/finish order consistent when an observer cancels. Model and iterator
+continuations recheck cancellation after awaiting even an already-resolved
+promise, so a terminated run cannot accept that late result.
+
+```ts
+const events = new RunEventBus();
+const off = events.subscribe(event => {
+  if (event.t === "text-delta") console.log(event.id, event.text);
+});
+const [done, stop] = run({ cannoli, events, canvasPath: "Flows/example.canvas" });
+await done;
+off();
+```
+
+Current events are `run-start`, `node-status` (nodes, groups and edges),
+`model-request`, `text-delta`, `model-finish`, `lint`, and `run-finish`.
+Model events share `id` (the graph object, empty for direct calls) and `callId`.
+Prompt and output text are redacted, including credentials split across stream
+chunks. Model usage is summed as reported; unknown cost is `null`. Goal-agent
+usage remains limited to what its existing ModelPort reports. The start event's
+`canvasHash` is a stable 32-bit FNV-1a fingerprint, not an integrity guarantee.
+Agent/retry/approval events, paused runs and scoped execution belong to later phases.
+
+Run wraps supplied persistors in `BatchedPersistor`: edits coalesce per node/edge,
+text updates flush every 250 ms, and status changes flush on the next tick.
+Executing snapshots remain visible for at least 300 ms; only persistence waits,
+so the graph continues scheduling immediately. Finish/cancel callbacks and the
+`run-finish` event occur after the final flush; persistence failure reports an
+error rather than successful completion. Terminal runs cancel their remaining model
+calls and settle their call events before reporting final usage. Usage includes
+only what providers reported before cancellation; late responses from providers
+that ignore cancellation are discarded. A run's internal cancellation leaves
+its parent's shared controller available. Hosts may implement optional
+`applyBatch(edits)` for one atomic transaction per flush and `flush()` to await
+their own write queues. Existing Persistor methods remain supported.
+
+The Obsidian CanvasPersistor uses one `vault.process` callback per batch, merges
+against the current file, and updates only runtime text, label, colour and cannoliData on existing objects.
+Current geometry, routing and extension fields stay authoritative; new objects
+retain their full snapshots.
+No batching setting or settings migration is required. Verify with
+`pnpm --filter @deablabs/cannoli-core exec vitest run test/run/batched.test.ts test/run/events.test.ts`
+and `pnpm --filter cannoli-plugin exec vitest run test/canvas.test.ts`.
+
 ## Deploying a new version of cannoli-server
 
 ```bash

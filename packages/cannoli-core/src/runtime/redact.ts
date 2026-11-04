@@ -22,6 +22,37 @@ export function redactSecrets(text: string, secrets: SecretResolver): string {
   return redactText(text, secretPairs(secrets));
 }
 
+/** Hold a possible credential prefix so chunk boundaries cannot bypass redaction. */
+export function streamRedactor(
+  secrets: SecretResolver,
+): (text: string, final?: boolean) => string {
+  const pairs = secretPairs(secrets);
+  let pending = "";
+  return (text, final = false) => {
+    pending += text;
+    let out = "";
+    let i = 0;
+    while (i < pending.length) {
+      const remainder = pending.slice(i);
+      if (
+        !final &&
+        pairs.some(
+          ([, value]) =>
+            value.length > remainder.length && value.startsWith(remainder),
+        )
+      )
+        break;
+      const match = pairs.find(([, value]) => pending.startsWith(value, i));
+      if (match) {
+        out += `«secret:${match[0]}»`;
+        i += match[1].length;
+      } else out += pending[i++];
+    }
+    pending = pending.slice(i);
+    return out;
+  };
+}
+
 function redactText(text: string, pairs: SecretPairs): string {
   if (pairs.length === 0 || text === "") return text;
 
@@ -71,6 +102,7 @@ function redactKeys(obj: Obj, keys: string[], pairs: SecretPairs): Obj {
 /** Deep-copy `value`, redacting every string in it (free-form data only). */
 function redactDeep(value: unknown, pairs: SecretPairs): unknown {
   if (typeof value === "string") return redactText(value, pairs);
+  if (value instanceof URL) return redactText(value.href, pairs);
   if (Array.isArray(value)) return value.map((v) => redactDeep(v, pairs));
   if (isObj(value)) {
     const out: Obj = {};
@@ -78,6 +110,11 @@ function redactDeep(value: unknown, pairs: SecretPairs): unknown {
     return out;
   }
   return value;
+}
+
+/** Event-only copy: URLs and metadata must not inherit transport redaction exemptions. */
+export function redactEventData<T>(value: T, secrets: SecretResolver): T {
+  return redactDeep(value, secretPairs(secrets)) as T;
 }
 
 function redactMessage(message: unknown, pairs: SecretPairs): unknown {
@@ -138,6 +175,36 @@ export function redactingPersistor(
 ): Persistor {
   const text = (value: string) => redactText(value, secretPairs(secrets));
   return {
+    ...(persistor.flush ? { flush: () => persistor.flush!() } : {}),
+    ...(persistor.applyBatch
+      ? {
+          applyBatch: (
+            edits: Parameters<NonNullable<Persistor["applyBatch"]>>[0],
+          ) => {
+            const pairs = secretPairs(secrets);
+            return persistor.applyBatch!(
+              edits.map((edit) => {
+                switch (edit.type) {
+                  case "node":
+                    return {
+                      ...edit,
+                      node: redactCanvasObject(edit.node, pairs),
+                    };
+                  case "edge":
+                    return {
+                      ...edit,
+                      edge: redactCanvasObject(edit.edge, pairs),
+                    };
+                  case "label":
+                    return { ...edit, label: text(edit.label) };
+                  default:
+                    return { ...edit, message: text(edit.message) };
+                }
+              }),
+            );
+          },
+        }
+      : {}),
     start: (canvasData) => {
       const pairs = secretPairs(secrets);
       return persistor.start({

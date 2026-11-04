@@ -2,6 +2,7 @@ import { TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import {
   Persistor,
+  PersistorEdit,
   CannoliCanvasData,
   CanvasData,
   AllCanvasNodeData,
@@ -37,109 +38,112 @@ export class CanvasPersistor implements Persistor {
     this.config = config;
   }
 
-  async start(newCanvasData: CannoliCanvasData) {
-    this.enqueueRemoveAllErrorNodes();
-
-    const canvasData = await this.readCanvasData();
-
-    newCanvasData.nodes.forEach((node) => {
-      const existingNode = canvasData.nodes.find((n) => n.id === node.id);
-
-      if (!this.allowCannoliData) {
-        if (node.cannoliData?.originalObject) {
-          return;
-        }
-
-        delete node.cannoliData;
-      }
-
-      if (existingNode) {
-        Object.assign(existingNode, node);
-      } else {
-        canvasData.nodes.push(node);
-      }
-    });
-
-    newCanvasData.edges.forEach((edge) => {
-      const existingEdge = canvasData.edges.find((e) => e.id === edge.id);
-
-      if (!this.allowCannoliData) {
-        if (edge.cannoliData?.originalObject) {
-          return;
-        }
-
-        delete edge.cannoliData;
-      }
-
-      if (existingEdge) {
-        Object.assign(existingEdge, edge);
-      } else {
-        canvasData.edges.push(edge);
-      }
-    });
-
-    await this.writeCanvasData(canvasData);
-  }
-
-  async editNode(newNode: AllCannoliCanvasNodeData): Promise<void> {
-    this.editQueue = this.editQueue.then(async () => {
-      const canvasData = await this.readCanvasData();
-      const existingNode = canvasData.nodes.find((n) => n.id === newNode.id);
-      if (existingNode) {
-        // keep the old x, y, height, and width
-        newNode.x = existingNode.x;
-        newNode.y = existingNode.y;
-        newNode.height = existingNode.height;
-        newNode.width = existingNode.width;
-
-        if (!this.allowCannoliData) {
-          if (newNode.cannoliData?.originalObject) {
-            return;
-          }
-
-          delete newNode.cannoliData;
-        }
-
-        Object.assign(existingNode, newNode);
-      }
-      await this.writeCanvasData(canvasData);
+  async start(newCanvasData: CannoliCanvasData): Promise<void> {
+    return this.mutate((data) => {
+      this.removeAllErrorNodes(data);
+      for (const node of newCanvasData.nodes) this.mergeNode(data, node, true);
+      for (const edge of newCanvasData.edges) this.mergeEdge(data, edge, true);
     });
   }
 
-  async editEdge(newEdge: CannoliCanvasEdgeData): Promise<void> {
-    this.editQueue = this.editQueue.then(async () => {
-      const canvasData = await this.readCanvasData();
-      const existingEdge = canvasData.edges.find((e) => e.id === newEdge.id);
-      if (existingEdge) {
-        if (!this.allowCannoliData) {
-          if (newEdge.cannoliData?.originalObject) {
-            return;
+  editNode(node: AllCannoliCanvasNodeData): Promise<void> {
+    return this.mutate((data) => this.mergeNode(data, node));
+  }
+
+  editEdge(edge: CannoliCanvasEdgeData): Promise<void> {
+    return this.mutate((data) => this.mergeEdge(data, edge));
+  }
+
+  /** Apply a whole flush against the current file inside one atomic vault.process. */
+  applyBatch(edits: readonly PersistorEdit[]): Promise<void> {
+    const snapshots = structuredClone(edits);
+    return this.mutate((data) => {
+      for (const edit of snapshots) {
+        switch (edit.type) {
+          case "node":
+            this.mergeNode(data, edit.node);
+            break;
+          case "edge":
+            this.mergeEdge(data, edit.edge);
+            break;
+          case "error":
+            this.addErrorNode(data, edit.id.split("-")[0], edit.message);
+            break;
+          case "warning":
+            this.addWarningNode(data, edit.id.split("-")[0], edit.message);
+            break;
+          case "label": {
+            const node = data.nodes.find((n) => n.id === edit.id);
+            if (node) (node as CannoliCanvasGroupData).label = edit.label;
           }
-
-          delete newEdge.cannoliData;
         }
-
-        Object.assign(existingEdge, newEdge);
       }
-
-      await this.writeCanvasData(canvasData);
     });
+  }
+
+  async flush(): Promise<void> {
+    await this.editQueue;
+  }
+
+  private mergeNode(
+    data: CannoliCanvasData,
+    source: AllCannoliCanvasNodeData,
+    create = false,
+  ): void {
+    if (!this.allowCannoliData && source.cannoliData?.originalObject) return;
+    const node = structuredClone(source);
+    if (!this.allowCannoliData) delete node.cannoliData;
+    const existing = data.nodes.find((n) => n.id === node.id);
+    if (existing) {
+      this.mergeRuntimeFields(existing, node, [
+        "text",
+        "color",
+        "label",
+        "cannoliData",
+      ]);
+    } else if (create) data.nodes.push(node);
+  }
+
+  private mergeEdge(
+    data: CannoliCanvasData,
+    source: CannoliCanvasEdgeData,
+    create = false,
+  ): void {
+    if (!this.allowCannoliData && source.cannoliData?.originalObject) return;
+    const edge = structuredClone(source);
+    if (!this.allowCannoliData) delete edge.cannoliData;
+    const existing = data.edges.find((e) => e.id === edge.id);
+    if (existing)
+      this.mergeRuntimeFields(existing, edge, [
+        "label",
+        "color",
+        "cannoliData",
+      ]);
+    else if (create) data.edges.push(edge);
+  }
+
+  private mergeRuntimeFields(
+    current: Record<string, unknown>,
+    update: Record<string, unknown>,
+    fields: string[],
+  ): void {
+    for (const key of fields) if (key in update) current[key] = update[key];
+  }
+
+  private mutate(edit: (data: CannoliCanvasData) => void): Promise<void> {
+    this.editQueue = this.editQueue.then(() =>
+      this.canvasFile.vault.process(this.canvasFile, (content) => {
+        const data = JSON.parse(content) as CannoliCanvasData;
+        edit(data);
+        const next = JSON.stringify(data);
+        return next === content ? content : next;
+      }),
+    );
+    return this.editQueue.then(() => {});
   }
 
   async readCanvasData(): Promise<CannoliCanvasData> {
-    const fileContent = await this.canvasFile.vault.read(this.canvasFile);
-    return JSON.parse(fileContent);
-  }
-
-  private async writeCanvasData(data: CannoliCanvasData) {
-    const newContent = JSON.stringify(data);
-
-    // Callback function of the type '(data: string) => string'. Called to edit the file contents.
-    const onEdit = (data: string) => {
-      return newContent;
-    };
-
-    await this.canvasFile.vault.process(this.canvasFile, onEdit);
+    return JSON.parse(await this.canvasFile.vault.read(this.canvasFile));
   }
 
   private addErrorNode(
@@ -261,53 +265,31 @@ export class CanvasPersistor implements Persistor {
     return data;
   }
 
-  async addError(nodeId: string, message: string) {
-    // If the id has a "-" in it, remove it and everything after it
-    if (nodeId.includes("-")) {
-      nodeId = nodeId.split("-")[0];
-    }
-
-    this.editQueue = this.editQueue.then(async () => {
-      const data = await this.readCanvasData();
-      const newData = this.addErrorNode(data, nodeId, message);
-      await this.writeCanvasData(newData);
+  addError(nodeId: string, message: string): Promise<void> {
+    return this.mutate((data) => {
+      this.addErrorNode(data, nodeId.split("-")[0], message);
     });
   }
 
-  async addWarning(nodeId: string, message: string) {
-    // If the id has a "-" in it, remove it and everything after it
-    if (nodeId.includes("-")) {
-      nodeId = nodeId.split("-")[0];
-    }
-
-    this.editQueue = this.editQueue.then(async () => {
-      const data = await this.readCanvasData();
-      const newData = this.addWarningNode(data, nodeId, message);
-      if (newData) {
-        await this.writeCanvasData(newData);
-      }
+  addWarning(nodeId: string, message: string): Promise<void> {
+    return this.mutate((data) => {
+      this.addWarningNode(data, nodeId.split("-")[0], message);
     });
   }
 
-  async editOriginalParallelGroupLabel(originalGroupId: string, label: string) {
-    this.editQueue = this.editQueue.then(async () => {
-      const data = await this.readCanvasData();
-
-      // Find the node with the originalGroupId
-      const node = data.nodes.find((node) => node.id === originalGroupId);
-      if (node) {
-        (node as CannoliCanvasGroupData).label = label;
-      }
-
-      await this.writeCanvasData(data);
+  editOriginalParallelGroupLabel(
+    originalGroupId: string,
+    label: string,
+  ): Promise<void> {
+    return this.mutate((data) => {
+      const node = data.nodes.find((n) => n.id === originalGroupId);
+      if (node) (node as CannoliCanvasGroupData).label = label;
     });
   }
 
-  async enqueueRemoveAllErrorNodes() {
-    this.editQueue = this.editQueue.then(async () => {
-      const data = await this.readCanvasData();
-      const newData = this.removeAllErrorNodes(data);
-      await this.writeCanvasData(newData);
+  enqueueRemoveAllErrorNodes(): Promise<void> {
+    return this.mutate((data) => {
+      this.removeAllErrorNodes(data);
     });
   }
 
