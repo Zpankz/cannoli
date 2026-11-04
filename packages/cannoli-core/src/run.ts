@@ -18,6 +18,7 @@ import {
   LLMConfig,
   LLMProvider,
   LLMProvider as Llm,
+  type SupportedProviders,
 } from "./providers";
 import invariant from "tiny-invariant";
 import { CannoliFactory } from "./factory";
@@ -773,6 +774,20 @@ export class Run {
     return this.llm?.getConfig() ?? {};
   }
 
+  /** The SDK path needs the same provider/model/generation defaults as the legacy port. */
+  private modelRequest(
+    request: GenericCompletionParams,
+  ): GenericCompletionParams {
+    if (this.modelOverride || this.providerEngine !== "ai-sdk") return request;
+    return {
+      ...request,
+      ...this.llm?.getMergedConfig?.({
+        provider: request.provider as SupportedProviders | undefined,
+        configOverrides: request,
+      }),
+    };
+  }
+
   objectUpdated(
     object: CannoliObject,
     status: CannoliObjectStatus,
@@ -1093,10 +1108,6 @@ export class Run {
     request: GenericCompletionParams,
     verbose?: boolean,
   ): Promise<GenericCompletionResponse | Error> {
-    request = {
-      ...request,
-      provider: request.provider ?? this.llm?.getConfig?.()?.provider,
-    };
     request = redactRequest(request, this.redactionSecrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
@@ -1111,7 +1122,9 @@ export class Run {
         try {
           if (signal.aborted) throw signal.reason;
           const result = await raceAbort(
-            model.generate(fromLegacyParams(request, signal)),
+            model.generate(
+              fromLegacyParams(this.modelRequest(request), signal),
+            ),
             signal,
           );
           const completion = toLegacyResponse(result);
@@ -1211,10 +1224,6 @@ export class Run {
   }
 
   async callLLMStream(request: GenericCompletionParams) {
-    request = {
-      ...request,
-      provider: request.provider ?? this.llm?.getConfig?.()?.provider,
-    };
     request = redactRequest(request, this.redactionSecrets);
     const model = this.model;
     if (this.isMock || !model) {
@@ -1245,7 +1254,7 @@ export class Run {
     try {
       if (signal.aborted) throw signal.reason;
       events = model
-        .stream(fromLegacyParams(request, signal))
+        .stream(fromLegacyParams(this.modelRequest(request), signal))
         [Symbol.asyncIterator]();
       const first = await raceAbort(events.next(), signal);
       started = true;
