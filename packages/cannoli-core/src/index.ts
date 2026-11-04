@@ -5,6 +5,8 @@ export * from "./providers";
 export * from "./run";
 export * from "./graph/objects/vertices/CannoliNode";
 export * from "./cannoli";
+export { RunController, StopError } from "./runtime/controller";
+export type { CallOptions, TokenUsage } from "./runtime/usage";
 export { bake, callCannoliFunction, parseCannoliFunctionInfo } from "./bake";
 export type {
   BakeLanguage,

@@ -1,7 +1,9 @@
 import { Run, RunArgs, Stoppage } from "./run";
+import { RunController, StopError } from "./runtime/controller";
 
 export function run({
   onFinish,
+  controller = new RunController(),
   ...args
 }: RunArgs): [Promise<Stoppage>, () => void] {
   let resolver: (stoppage: Stoppage) => void;
@@ -11,6 +13,7 @@ export function run({
 
   const run = new Run({
     ...args,
+    controller,
     onFinish: (stoppage: Stoppage) => {
       resolver(stoppage);
       if (onFinish) onFinish(stoppage);
@@ -19,7 +22,7 @@ export function run({
 
   run.start();
 
-  return [done, () => run.stop()];
+  return [done, () => controller.stop()];
 }
 
 export async function resultsRun(
@@ -31,6 +34,11 @@ export async function resultsRun(
 
   if (stoppage.reason === "error") {
     throw new Error(`Error occurred during the run: ${stoppage.message}`);
+  }
+
+  // A stopped run (a subcannoli whose parent was stopped) has no results.
+  if (stoppage.reason === "user") {
+    throw new StopError("Stopped by user");
   }
 
   return stoppage.results;

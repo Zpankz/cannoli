@@ -12,6 +12,7 @@ import {
   ActionArgs,
   HttpRequest,
   HttpTemplate,
+  ResponseTextFetcher,
 } from "src/run";
 import { z } from "zod";
 import { secretsToRecord } from "src/secrets";
@@ -110,7 +111,13 @@ export class HttpNode extends ContentNode {
         action.argInfo[argName] &&
         action.argInfo[argName].category === "fetcher"
       ) {
-        args[argName] = this.run.fetcher;
+        // ...carrying the run's signal, so a stop cancels the action's requests.
+        const { fetcher, controller } = this.run;
+        args[argName] = ((url: string, options: RequestInit = {}) =>
+          fetcher(url, {
+            ...options,
+            signal: controller.signal,
+          })) satisfies ResponseTextFetcher;
         continue;
       }
 

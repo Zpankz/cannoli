@@ -10,6 +10,7 @@ import { ChatOllama } from "@langchain/ollama";
 import { ChatCompletionMessageParam } from "openai/resources/index";
 import {
   AIMessage,
+  BaseMessage,
   ChatMessage,
   HumanMessage,
   MessageContentImageUrl,
@@ -17,10 +18,38 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 
-import { StringOutputParser } from "@langchain/core/output_parsers";
 import { choiceTool, formTool, noteSelectTool } from "./fn_calling";
+import {
+  usageFromMetadata,
+  type CallOptions,
+  type TokenUsage,
+} from "./runtime/usage";
 
-const stringParser = new StringOutputParser();
+/**
+ * A message's text, as StringOutputParser extracts it: string content, or
+ * the text of its text parts; other parts can't become a string.
+ */
+function messageText(message: BaseMessage): string {
+  const { content } = message;
+  if (typeof content === "string") return content;
+  return content
+    .map((part) => {
+      if ((part.type === "text" || part.type === "text_delta") && "text" in part) {
+        return part.text as string;
+      }
+      throw new Error(`Cannot coerce "${part.type}" message part into a string.`);
+    })
+    .join("");
+}
+
+/** Pass on the usage_metadata a model call returned, if any. */
+function reportUsage(
+  message: AIMessage,
+  onUsage: CallOptions["onUsage"],
+): void {
+  const usage = usageFromMetadata(message.usage_metadata);
+  if (usage) onUsage?.(usage);
+}
 
 export type SupportedProviders =
   | "openai"
@@ -410,11 +439,10 @@ export class LLMProvider {
     });
   };
 
-  getCompletion = async ({
-    messages,
-    imageReferences,
-    ...configOverrides
-  }: GenericCompletionParams): Promise<GenericCompletionResponse> => {
+  getCompletion = async (
+    { messages, imageReferences, ...configOverrides }: GenericCompletionParams,
+    { signal, onUsage }: CallOptions = {},
+  ): Promise<GenericCompletionResponse> => {
     const hasFunctionCall =
       !!configOverrides.functions && !!configOverrides.function_call;
     const client = this.getChatClient({
@@ -438,11 +466,18 @@ export class LLMProvider {
         client,
         functions: configOverrides.functions,
         function_call: configOverrides.function_call,
+        signal,
+        onUsage,
       });
     } else {
-      const content = await this.clientWithMetadata(client)
-        .pipe(stringParser)
-        .invoke(convertedMessages, untraced());
+      // Invoke the model itself, not model.pipe(parser): the parser drops
+      // the message's usage_metadata.
+      const message = await this.clientWithMetadata(client).invoke(
+        convertedMessages,
+        { ...untraced(), signal },
+      );
+      reportUsage(message, onUsage);
+      const content = messageText(message);
 
       return {
         role: "assistant", // optional when functions included
@@ -457,13 +492,15 @@ export class LLMProvider {
     client: _client,
     functions,
     function_call,
+    signal,
+    onUsage,
   }: {
     provider: SupportedProviders;
     convertedMessages: LangchainMessages;
     client: BaseChatModel;
     functions: GenericFunctionCall[];
     function_call: { name: string };
-  }) => {
+  } & CallOptions) => {
     const client =
       _client.bindTools?.(
         (functions
@@ -495,8 +532,9 @@ export class LLMProvider {
       ) ?? _client;
     const response = await this.clientWithMetadata(client).invoke(
       convertedMessages,
-      untraced(),
+      { ...untraced(), signal },
     );
+    reportUsage(response, onUsage);
 
     return {
       role: "assistant",
@@ -508,10 +546,10 @@ export class LLMProvider {
     };
   };
 
-  getCompletionStream = async ({
-    messages,
-    ...configOverrides
-  }: GenericCompletionParams) => {
+  getCompletionStream = async (
+    { messages, ...configOverrides }: GenericCompletionParams,
+    { signal, onUsage }: CallOptions = {},
+  ): Promise<AsyncGenerator<string>> => {
     const client = this.getChatClient({
       configOverrides,
       // @ts-expect-error
@@ -519,11 +557,28 @@ export class LLMProvider {
     });
 
     const convertedMessages = LLMProvider.convertMessages(messages);
-    const stream = await client
-      .pipe(stringParser)
-      .stream(convertedMessages, untraced());
+    // Stream message chunks, not client.pipe(parser): the parser drops the
+    // usage_metadata that arrives on the last chunk.
+    const stream = await client.stream(convertedMessages, {
+      ...untraced(),
+      signal,
+    });
 
-    return stream;
+    return (async function* () {
+      // Providers may split usage over chunks (input first, output last).
+      let total: TokenUsage | undefined;
+      for await (const chunk of stream) {
+        const usage = usageFromMetadata(chunk.usage_metadata);
+        if (usage) {
+          total = {
+            inputTokens: (total?.inputTokens ?? 0) + usage.inputTokens,
+            outputTokens: (total?.outputTokens ?? 0) + usage.outputTokens,
+          };
+        }
+        yield messageText(chunk);
+      }
+      if (total) onUsage?.(total);
+    })();
   };
 
   getGoalCompletion = async ({
@@ -537,7 +592,9 @@ export class LLMProvider {
     onReasoningMessagesUpdated?: (
       messages: GenericCompletionResponse[],
     ) => void;
-  }) => {
+  },
+    { signal }: CallOptions = {},
+  ) => {
     const client = this.getChatClient({
       configOverrides,
       // @ts-expect-error
@@ -631,6 +688,7 @@ export class LLMProvider {
           messages: LLMProvider.convertMessages(messages),
         },
         {
+          signal,
           callbacks: [
             tracingBlocker(),
             {
