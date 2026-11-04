@@ -63,7 +63,9 @@ export function withSignal<O extends { signal?: AbortSignal | null }, R>(
     fetch(url, {
       ...options,
       // Keep the caller's own signal (e.g. its timeout) as well.
-      signal: options.signal ? AbortSignal.any([options.signal, signal]) : signal,
+      signal: options.signal
+        ? AbortSignal.any([options.signal, signal])
+        : signal,
     });
 }
 
@@ -72,7 +74,10 @@ export function withSignal<O extends { signal?: AbortSignal | null }, R>(
  * aborts. For calls that can't be cancelled themselves (Obsidian's
  * requestUrl, a provider that ignores its signal), so a stop never waits.
  */
-export function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+export function raceAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
   if (signal.aborted) {
     // The promise may still reject (its source saw the abort); handle that.
     promise.catch(() => {});

@@ -34,10 +34,15 @@ function messageText(message: BaseMessage): string {
   if (typeof content === "string") return content;
   return content
     .map((part) => {
-      if ((part.type === "text" || part.type === "text_delta") && "text" in part) {
+      if (
+        (part.type === "text" || part.type === "text_delta") &&
+        "text" in part
+      ) {
         return part.text as string;
       }
-      throw new Error(`Cannot coerce "${part.type}" message part into a string.`);
+      throw new Error(
+        `Cannot coerce "${part.type}" message part into a string.`,
+      );
     })
     .join("");
 }
@@ -582,18 +587,19 @@ export class LLMProvider {
     })();
   };
 
-  getGoalCompletion = async ({
-    messages,
-    onReasoningMessagesUpdated,
-    ...configOverrides
-  }: GenericCompletionParams & {
-    /**
-     * Called for each set of messages that is created during the reasoning process
-     */
-    onReasoningMessagesUpdated?: (
-      messages: GenericCompletionResponse[],
-    ) => void;
-  },
+  getGoalCompletion = async (
+    {
+      messages,
+      onReasoningMessagesUpdated,
+      ...configOverrides
+    }: GenericCompletionParams & {
+      /**
+       * Called for each set of messages that is created during the reasoning process
+       */
+      onReasoningMessagesUpdated?: (
+        messages: GenericCompletionResponse[],
+      ) => void;
+    },
     { signal }: CallOptions = {},
   ) => {
     const client = this.getChatClient({

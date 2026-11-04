@@ -33,7 +33,12 @@ const text = (id: string, t: string, x: number, y: number, color?: string) => ({
   ...box,
   ...(color ? { color } : {}),
 });
-const edge = (id: string, fromNode: string, toNode: string, color?: string) => ({
+const edge = (
+  id: string,
+  fromNode: string,
+  toNode: string,
+  color?: string,
+) => ({
   id,
   fromNode,
   fromSide: "right",
@@ -236,7 +241,10 @@ describe("controller", () => {
       },
       { signal },
     );
-    for await (const _ of await llm.getCompletionStream({ messages }, { signal })) {
+    for await (const _ of await llm.getCompletionStream(
+      { messages },
+      { signal },
+    )) {
       // drain
     }
 
@@ -362,11 +370,19 @@ describe("controller", () => {
     const { signal } = controller;
     const add = signal.addEventListener.bind(signal);
     const remove = signal.removeEventListener.bind(signal);
-    signal.addEventListener = ((type: string, fn: EventListener, o?: unknown) => {
+    signal.addEventListener = ((
+      type: string,
+      fn: EventListener,
+      o?: unknown,
+    ) => {
       if (type === "abort") added.push(fn);
       add(type, fn, o as AddEventListenerOptions);
     }) as typeof signal.addEventListener;
-    signal.removeEventListener = ((type: string, fn: EventListener, o?: unknown) => {
+    signal.removeEventListener = ((
+      type: string,
+      fn: EventListener,
+      o?: unknown,
+    ) => {
       if (type === "abort") removed.push(fn);
       remove(type, fn, o as EventListenerOptions);
     }) as typeof signal.removeEventListener;
