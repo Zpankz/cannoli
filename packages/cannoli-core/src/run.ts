@@ -860,7 +860,7 @@ export class Run {
   private get langchainModel(): LangchainModelPort | null {
     if (!this.llm || !this.llm.initialized) return null;
     if (this.langchainPort?.llm !== this.llm) {
-      this.langchainPort = new LangchainModelPort(this.llm);
+      this.langchainPort = new LangchainModelPort(this.llm, this.modelFetch);
       this.aiSdkPort = null;
     }
     return this.langchainPort;
