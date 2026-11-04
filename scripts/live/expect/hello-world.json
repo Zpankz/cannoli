@@ -1,0 +1,20 @@
+{
+	"run": "complete",
+	"nodes": [
+		{
+			"node": "bc1a550bbb4aac7b",
+			"textMatches": "\\S",
+			"color": "6",
+			"status": "ok"
+		},
+		{
+			"node": "Hello world!",
+			"status": "complete",
+			"color": "4"
+		}
+	],
+	"notices": [
+		"^Started cannoli: 1\\. Hello world",
+		"^Cannoli complete: 1\\. Hello world"
+	]
+}

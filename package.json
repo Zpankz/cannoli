@@ -9,6 +9,8 @@
 		"test:golden": "pnpm --filter @deablabs/cannoli-core exec vitest run test/golden",
 		"check:bundle": "node scripts/check-bundle.mjs",
 		"test:bundle": "node --test scripts/check-bundle.test.mjs",
+		"test:live-unit": "bun test scripts/live",
+		"live:smoke": "bash scripts/live/smoke.sh",
 		"dev": "turbo run dev",
 		"release-plugin": "turbo run release --filter cannoli-plugin",
 		"build-college": "turbo run build-college --filter cannoli-plugin",

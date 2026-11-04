@@ -1,0 +1,10 @@
+{
+	"nodes": [
+		{ "id": "161279baf7763214", "type": "group", "label": "Cannoli", "x": -174, "y": -160, "width": 394, "height": 340 },
+		{ "id": "dc3f9351f787531e", "type": "text", "text": "Hello world!", "x": -97, "y": -91, "width": 250, "height": 60 },
+		{ "id": "bc1a550bbb4aac7b", "type": "text", "text": "Hello! How can I help you today?", "x": -97, "y": 60, "width": 250, "height": 60, "color": "6" }
+	],
+	"edges": [
+		{ "id": "23c2d7dffb49bf75", "fromNode": "dc3f9351f787531e", "fromSide": "bottom", "toNode": "bc1a550bbb4aac7b", "toSide": "top" }
+	]
+}

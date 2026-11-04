@@ -6,6 +6,13 @@ set -euo pipefail
 source "$(dirname "$0")/env.sh"
 mode="${1:-start}"
 
+# True if pid is our isolated instance. Case-insensitive: macOS paths are case-insensitive,
+# and the argv spelling depends on how the launching shell spelled the worktree path.
+owns_instance() {
+  ps -o command= -p "$1" 2>/dev/null | tr '[:upper:]' '[:lower:]' |
+    grep -qF -- "$(printf '%s' "--user-data-dir=$LIVE_USERDATA" | tr '[:upper:]' '[:lower:]')"
+}
+
 case "$mode" in
   status)
     pid="$(live_pid)"
@@ -15,7 +22,7 @@ case "$mode" in
     pid="$(live_pid)"
     [ -z "$pid" ] && { echo "not running (port $CDP_PORT)"; exit 0; }
     # Only stop the process that owns our port AND our user-data dir.
-    if ! ps -o command= -p "$pid" | grep -qF -- "--user-data-dir=$LIVE_USERDATA"; then
+    if ! owns_instance "$pid"; then
       echo "pid $pid on port $CDP_PORT is not the isolated instance; refusing to stop it" >&2; exit 1
     fi
     kill -TERM "$pid"
@@ -24,7 +31,7 @@ case "$mode" in
     ;;
   start)
     if pid="$(live_pid)" && [ -n "$pid" ]; then
-      if ps -o command= -p "$pid" | grep -qF -- "--user-data-dir=$LIVE_USERDATA"; then
+      if owns_instance "$pid"; then
         echo "already running pid=$pid port=$CDP_PORT"; exit 0
       fi
       echo "port $CDP_PORT is held by another process (pid $pid); not launching" >&2; exit 1
