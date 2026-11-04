@@ -1,0 +1,10 @@
+{
+	"canvas": "Smoke/long.canvas",
+	"description": "P1.1: run with STOP_AFTER_MS≈2000. The stop ends the run as stopped, the streaming call node gets a warning, and the text streamed before the stop stays in output",
+	"run": "stopped",
+	"nodes": [
+		{ "node": "call", "status": "warning" },
+		{ "node": "output", "color": "6", "textMatches": "\\w+(?:\\W+\\w+){4,}" }
+	],
+	"notices": ["^Cannoli stopped:"]
+}
