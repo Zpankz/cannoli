@@ -745,13 +745,13 @@ export class Run {
     this.callAbort.abort(new Error(message ?? "Run finished"));
     for (const settle of [...this.openStreams]) settle();
 
-    const finish = (failure?: unknown) => {
+    const finish = (persistenceFailed = false) => {
       // A final text observer may stop the run from inside call settlement.
       if (this.settlingCalls > 0) {
-        queueMicrotask(() => finish(failure));
+        queueMicrotask(() => finish(persistenceFailed));
         return;
       }
-      if (failure) {
+      if (persistenceFailed) {
         reason = "error";
         message = "Could not persist the final canvas state.";
       }
@@ -781,7 +781,10 @@ export class Run {
       });
     };
     if (this.persistor?.flush)
-      void this.persistor.flush().then(() => finish(), finish);
+      void this.persistor.flush().then(
+        () => finish(),
+        () => finish(true),
+      );
     else finish();
   }
 
@@ -894,11 +897,7 @@ export class Run {
     request: GenericCompletionParams,
     resolveLegacyDefaults = false,
   ): GenericCompletionParams {
-    if (
-      !resolveLegacyDefaults &&
-      (this.modelOverride || this.providerEngine !== "ai-sdk")
-    )
-      return request;
+    if (!resolveLegacyDefaults && this.modelOverride) return request;
     return {
       ...request,
       ...this.llm?.getMergedConfig?.({

@@ -59,11 +59,17 @@ export class CallNode extends CannoliNode {
 
   async execute() {
     this.executing();
+    if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+      return;
 
     let request: GenericCompletionParams;
     try {
       request = await this.createLLMRequest();
+      if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+        return;
     } catch (error) {
+      if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+        return;
       this.error(`Error creating LLM request: ${error}`);
       return;
     }
@@ -83,6 +89,8 @@ export class CallNode extends CannoliNode {
 
     if (chatResponseEdges.length > 0) {
       const stream = await this.run.callLLMStream(request, this.id);
+      if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+        return;
 
       if (stream instanceof Error) {
         this.error(`Error calling LLM:\n${stream.message}`);
@@ -104,6 +112,8 @@ export class CallNode extends CannoliNode {
       let messageContent = "";
       // Process the stream. For each part, add the message to the request, and load the outgoing edges
       for await (const part of stream) {
+        if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+          return;
         if (!part || typeof part !== "string") {
           // deltas might be empty, that's okay, just get the next one
           continue;
@@ -121,6 +131,8 @@ export class CallNode extends CannoliNode {
         }
       }
 
+      if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+        return;
       // Load outgoing chatResponse edges with the message "END OF STREAM"
       for (const edge of chatResponseEdges) {
         edge.load({
@@ -139,6 +151,8 @@ export class CallNode extends CannoliNode {
       this.loadOutgoingEdges(messageContent, request);
     } else {
       const message = await this.run.callLLM(request, undefined, this.id);
+      if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+        return;
 
       if (message instanceof Error) {
         this.error(`Error calling LLM:\n${message.message}`);

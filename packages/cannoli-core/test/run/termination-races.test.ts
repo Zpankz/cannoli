@@ -1,3 +1,4 @@
+import type { Persistor } from "../../src/persistor";
 import { describe, expect, it } from "vitest";
 import { abortableStream, RunController } from "../../src/runtime/controller";
 import { Run } from "../../src/run";
@@ -300,6 +301,95 @@ describe("terminal races", () => {
     ]);
     expect(seen.at(-3)).toMatchObject({ text: "abc" });
     expect(seen.at(-1)).toMatchObject({ usage: result.usage, status: "error" });
+  });
+
+  it("does not publish a call result when cancellation queues before the caller resumes", async () => {
+    const { run, events } = setup();
+    run.model = {
+      async generate() {
+        return result;
+      },
+      async *stream() {},
+    };
+    events.subscribe((e) => {
+      if (e.t === "model-finish") queueMicrotask(() => run.stop());
+    });
+    await run.start();
+    await tick();
+    expect(run.graph.c.status).not.toBe("complete");
+    expect(run.graph.o.text).toBe("");
+    const edge = run.canvasData!.edges.find((e) => e.id === "e")!;
+    expect(edge.cannoliData.content).toBeUndefined();
+  });
+
+  it.each([undefined, null, false])(
+    "reports a flush rejection as failure regardless of its value (%s)",
+    async (rejected) => {
+      let finish = (reason: string) => {
+        void reason;
+      };
+      const done = new Promise<string>((resolve) => {
+        finish = resolve;
+      });
+      const persistor: Persistor = {
+        async start() {},
+        async editNode() {},
+        async editEdge() {},
+        async addError() {},
+        async addWarning() {},
+        async editOriginalParallelGroupLabel() {},
+        setConfig() {},
+        flush: () => Promise.reject(rejected),
+      };
+      const run = new Run({
+        cannoli: structuredClone(canvas),
+        llmConfigs: [{ provider: "ollama", model: "fake" }],
+        persistor,
+        onFinish: (s) => finish(s.reason),
+      });
+      run.model = {
+        async generate() {
+          return result;
+        },
+        async *stream() {},
+      };
+      await run.start();
+      expect(await done).toBe("error");
+    },
+  );
+
+  it("reports effective defaults on the built-in LangChain generate and stream paths", async () => {
+    const events = new RunEventBus();
+    const seen: RunEvent[] = [];
+    events.subscribe((e) => seen.push(e));
+    const run = new Run({
+      cannoli: structuredClone(canvas),
+      events,
+      providerEngine: "langchain",
+      llmConfigs: [{ provider: "ollama", model: "fake" }],
+    });
+    const observed: unknown[] = [];
+    run.llm!.getCompletion = async (input) => {
+      observed.push(input);
+      return { role: "assistant", content: "ok" };
+    };
+    run.llm!.getCompletionStream = async (input) => {
+      observed.push(input);
+      return (async function* () {
+        yield "ok";
+      })();
+    };
+    await run.callLLM({ messages: request.messages });
+    const stream = await run.callLLMStream({ messages: request.messages });
+    if (typeof stream === "string" || stream instanceof Error)
+      throw new Error("expected stream");
+    for await (const part of stream) void part;
+    expect(observed).toHaveLength(2);
+    expect(seen.filter((e) => e.t === "model-request")).toMatchObject([
+      { model: "ollama:fake" },
+      { model: "ollama:fake" },
+    ]);
+    run.stop();
   });
 
   it("does not mutate graph output after terminal failure", async () => {

@@ -391,6 +391,8 @@ export class HttpNode extends ContentNode {
         nodeId: this.id,
         request: { messages: [{ role: "user", content }] },
         onReasoningMessagesUpdated: (messages) => {
+          if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+            return;
           this.setText(
             baseContent +
               "\n\n" +
@@ -412,6 +414,8 @@ export class HttpNode extends ContentNode {
         },
       });
 
+      if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+        return;
       if (response instanceof Error) {
         this.error(response.message);
         return;
