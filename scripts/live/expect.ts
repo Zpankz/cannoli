@@ -26,6 +26,7 @@
 //   ok               none of the above. As an expectation, "ok" means "no error or warning",
 //                    so complete and executing nodes pass it too.
 // A colour the node already had in the pre-run canvas is not read as a status.
+import { isDeepStrictEqual } from "node:util";
 
 export type CanvasNode = {
   id: string;
@@ -278,8 +279,8 @@ export function fieldAt(node: Record<string, unknown>, path: string): unknown {
   return cur;
 }
 
-const deepEqual = (a: unknown, b: unknown): boolean =>
-  a === b || JSON.stringify(a) === JSON.stringify(b);
+// Structural: object key order doesn't matter, array order does.
+const deepEqual = (a: unknown, b: unknown): boolean => isDeepStrictEqual(a, b);
 
 /** Evaluate expectations against the post-run canvas and the notices seen during the run. */
 export function evaluate(

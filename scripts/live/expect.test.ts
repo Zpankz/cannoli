@@ -249,6 +249,26 @@ describe("expect.ts", () => {
     expect(fieldFail?.pass).toBe(false);
     expect(fieldFail?.detail).toContain('"x"');
 
+    // Object-valued fields compare by structure, not key order.
+    const reordered = {
+      nodes: [
+        { id: "n", type: "text", text: "", cannoli: { probe: "x", v: 1 } },
+      ],
+      edges: [],
+    };
+    expect(
+      evaluate(
+        { nodes: [{ node: "n", fields: { cannoli: { v: 1, probe: "x" } } }] },
+        { canvas: reordered, notices: [] },
+      ).pass,
+    ).toBe(true);
+    expect(
+      evaluate(
+        { nodes: [{ node: "n", fields: { cannoli: { v: 2, probe: "x" } } }] },
+        { canvas: reordered, notices: [] },
+      ).pass,
+    ).toBe(false);
+
     // A canvas mismatch fails rather than silently checking the wrong file.
     expect(
       evaluate(exp, {
