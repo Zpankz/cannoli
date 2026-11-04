@@ -4,7 +4,7 @@
 // isMock: false to exercise it. Canvases without LLM calls need no network.
 import type { FileManager } from "../../src/fileManager";
 import type { Reference } from "../../src/graph";
-import { Run, type Stoppage } from "../../src/run";
+import { Run, type RunArgs, type Stoppage } from "../../src/run";
 
 export interface FakeVault {
   fileManager: FileManager;
@@ -73,6 +73,10 @@ export interface RunCanvasOptions {
   /** Defaults to true. */
   isMock?: boolean;
   timeoutMs?: number;
+  /** Extra Run constructor arguments (config, seed, llmConfigs, ...). */
+  runArgs?: Partial<RunArgs>;
+  /** Called after the Run is built and before start(), e.g. to swap its LLM. */
+  beforeStart?: (run: Run) => void | Promise<void>;
   /** Called after start() and before waiting, e.g. to stop the run. */
   afterStart?: (run: Run) => void | Promise<void>;
 }
@@ -92,12 +96,14 @@ export async function runCanvas(
     fetcher: async () => {
       throw new Error("network disabled in tests");
     },
+    ...opts.runArgs,
     onFinish: (stoppage) => {
       stoppages.push(stoppage);
       resolveFirst();
     },
   });
 
+  await opts.beforeStart?.(run);
   await run.start();
   await opts.afterStart?.(run);
 
