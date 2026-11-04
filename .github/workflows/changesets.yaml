@@ -10,6 +10,8 @@ env:
 
 jobs:
   version:
+    # Publishes to npm: run only on the upstream repository, never on forks.
+    if: github.repository == 'DeabLabs/cannoli'
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
