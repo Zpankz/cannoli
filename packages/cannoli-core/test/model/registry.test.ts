@@ -27,9 +27,7 @@ describe("model registry", () => {
       ]),
     );
     for (const m of MODELS) expect(m.price).toBeNull();
-    expect(getModelInfo("anthropic:claude-opus-5-5")?.roles).toContain(
-      "agent",
-    );
+    expect(getModelInfo("anthropic:claude-opus-5-5")?.roles).toContain("agent");
     expect(getModelInfo("openai:nope")).toBeUndefined();
   });
 

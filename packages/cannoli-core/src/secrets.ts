@@ -76,14 +76,15 @@ export function withProviderKeys(
     if (!apiKey || apiKey.trim() === "") continue;
     if (Object.values(keys).includes(apiKey)) continue;
     let name = `provider-key-${provider}`;
-    for (let n = 2; hasOwn(keys, name); n++) {
+    for (let n = 2; hasOwn(keys, name) || secrets.names().includes(name); n++) {
       name = `provider-key-${provider}-${n}`;
     }
     keys[name] = apiKey;
   }
   if (Object.keys(keys).length === 0) return secrets;
   return {
-    get: (name) => secrets.get(name) ?? (hasOwn(keys, name) ? keys[name] : null),
+    get: (name) =>
+      secrets.get(name) ?? (hasOwn(keys, name) ? keys[name] : null),
     names: () => [...new Set([...secrets.names(), ...Object.keys(keys)])],
   };
 }
