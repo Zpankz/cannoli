@@ -31,6 +31,9 @@ import { parseNamedNode } from "./utility";
 import { resultsRun } from "./cannoli";
 import { nanoid } from "nanoid";
 import { createRng, pick, seedFromCanvas, type Rng } from "./util/rng";
+import { type SecretResolver, toSecretResolver } from "./secrets";
+import { lintSecretInPrompt } from "./language/lints";
+import { redactingPersistor, redactRequest } from "./runtime/redact";
 
 export interface HttpTemplate {
   id: string;
@@ -168,7 +171,8 @@ export interface RunArgs {
   llmConfigs?: LLMConfig[];
   fetcher?: ResponseTextFetcher;
   config?: Record<string, unknown>;
-  secrets?: Record<string, string>;
+  /** A plain record is deprecated, kept for previously baked code. */
+  secrets?: SecretResolver | Record<string, string>;
   args?: Record<string, string>;
   onFinish?: (stoppage: Stoppage) => void;
   isMock?: boolean;
@@ -194,7 +198,7 @@ export class Run {
 
   args: Record<string, string> | null;
   config: Record<string, unknown> | null;
-  secrets: Record<string, string> | null;
+  secrets: SecretResolver;
   fileManager: FileManager | null = null;
   fetcher: ResponseTextFetcher;
   actions: Action[] = [];
@@ -248,7 +252,10 @@ export class Run {
     this.onFinish = onFinish ?? ((stoppage: Stoppage) => {});
     this.isMock = isMock ?? false;
     this.rng = createRng(seed ?? seedFromCanvas(cannoli));
-    this.persistor = persistor ?? null;
+    this.secrets = toSecretResolver(secrets);
+    this.persistor = persistor
+      ? redactingPersistor(persistor, this.secrets)
+      : null;
     this.usage = {};
     this.runId = `${nanoid(16)}${isMock ? "-mock" : ""}`;
     this.runDateEpochMs = Date.now();
@@ -264,7 +271,7 @@ export class Run {
     this.llm = llmConfigs
       ? new LLMProvider({
           configs: llmConfigs,
-          valtownApiKey: secrets?.["VALTOWN_API_KEY"],
+          valtownApiKey: this.secrets.get("VALTOWN_API_KEY") ?? undefined,
           runId: this.runId,
           runDateEpochMs: this.runDateEpochMs,
           runName: this.runName,
@@ -273,8 +280,7 @@ export class Run {
         })
       : null;
 
-    this.secrets = secrets ?? {};
-    this.config = { ...(config ?? {}), ...this.secrets };
+    this.config = { ...(config ?? {}) };
 
     this.args = args ?? null;
 
@@ -318,7 +324,7 @@ export class Run {
 
     const factory = new CannoliFactory(
       parsedCannoliJSON,
-      persistor,
+      this.persistor ?? undefined,
       resume,
       this.config?.contentIsColorless as boolean,
       this.currentNote ?? "No current note",
@@ -376,7 +382,7 @@ export class Run {
         httpTemplates,
         isMock: scIsMock,
         config,
-        secrets,
+        secrets: this.secrets,
         fetcher,
         replacers,
       });
@@ -399,6 +405,16 @@ export class Run {
 
     // Validate the graph
     this.validate();
+
+    // Never send a secret value to an LLM: fail before any call executes.
+    const secretLint = this.canvasData
+      ? lintSecretInPrompt(this.canvasData, this.secrets.names())[0]
+      : undefined;
+    if (secretLint) {
+      await this.persistor?.addError(secretLint.nodeId, secretLint.message);
+      this.handleFinish("error", secretLint.message);
+      return;
+    }
 
     let executedObjectsCount = 0;
 
@@ -933,6 +949,7 @@ export class Run {
     request: GenericCompletionParams,
     verbose?: boolean,
   ): Promise<GenericCompletionResponse | Error> {
+    request = redactRequest(request, this.secrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
         // Only call LLM if we're not mocking
@@ -993,6 +1010,7 @@ export class Run {
       messages: GenericCompletionResponse[],
     ) => void;
   }): Promise<GenericCompletionResponse | Error> {
+    request = redactRequest(request, this.secrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
         // Only call LLM if we're not mocking
@@ -1043,6 +1061,7 @@ export class Run {
   }
 
   async callLLMStream(request: GenericCompletionParams) {
+    request = redactRequest(request, this.secrets);
     if (this.isMock || !this.llm || !this.llm.initialized) {
       // Return mock stream
       return "Mock response";

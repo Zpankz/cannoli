@@ -3,6 +3,7 @@ import { FileManager } from "./fileManager";
 import { VerifiedCannoliCanvasData } from "./graph";
 import { LLMConfig } from "./providers";
 import { Action, HttpTemplate } from "./run";
+import { secretResolverFromRecord } from "./secrets";
 
 export enum CannoliParamType {
   String = "string",
@@ -81,7 +82,7 @@ export async function bake({
     cannoli,
     llmConfigs,
     config,
-    secrets,
+    secrets: secretResolverFromRecord(secrets ?? {}),
     isMock: true,
     actions,
     httpTemplates,

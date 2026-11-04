@@ -14,6 +14,7 @@ import {
   HttpTemplate,
 } from "src/run";
 import { z } from "zod";
+import { secretsToRecord } from "src/secrets";
 import { ContentNode } from "../ContentNode";
 import { FloatingNode } from "../../../FloatingNode";
 
@@ -344,7 +345,7 @@ export class HttpNode extends ContentNode {
 
     const config = {
       ...this.run.config,
-      ...this.run.secrets,
+      ...secretsToRecord(this.run.secrets),
       ...defaultHttpConfig,
       ...overrides,
     };
