@@ -27,9 +27,9 @@ export class StopError extends Error {
 
 /**
  * Pass a stream through until the signal aborts, then throw its reason
- * without waiting for the next chunk. The source is closed in the
- * background; a provider that ignores its own signal can't hold the
- * consumer.
+ * without waiting for the next chunk. Closing the source is requested in
+ * the background. A provider that ignores its own signal may leave its
+ * request open, but it can't hold the consumer or its concurrency slot.
  */
 export async function* abortableStream<T>(
   stream: AsyncIterable<T>,
@@ -54,13 +54,30 @@ export async function* abortableStream<T>(
   }
 }
 
+/** Wrap a fetcher so each request also carries the run's signal. */
+export function withSignal<O extends { signal?: AbortSignal | null }, R>(
+  fetch: (url: string, options: O) => R,
+  signal: AbortSignal,
+): (url: string, options?: O) => R {
+  return (url, options = {} as O) =>
+    fetch(url, {
+      ...options,
+      // Keep the caller's own signal (e.g. its timeout) as well.
+      signal: options.signal ? AbortSignal.any([options.signal, signal]) : signal,
+    });
+}
+
 /**
  * Settle with the promise, or reject with the signal's reason as soon as it
  * aborts. For calls that can't be cancelled themselves (Obsidian's
  * requestUrl, a provider that ignores its signal), so a stop never waits.
  */
 export function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) {
+    // The promise may still reject (its source saw the abort); handle that.
+    promise.catch(() => {});
+    return Promise.reject(signal.reason);
+  }
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => reject(signal.reason);
     signal.addEventListener("abort", onAbort, { once: true });

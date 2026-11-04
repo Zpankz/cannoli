@@ -5,7 +5,12 @@ import { CannoliObjectStatus } from "../../src/graph";
 import type { Persistor } from "../../src/persistor";
 import { LLMProvider, type GenericCompletionParams } from "../../src/providers";
 import { Run } from "../../src/run";
-import { RunController } from "../../src/runtime/controller";
+import {
+  RunController,
+  StopError,
+  raceAbort,
+  withSignal,
+} from "../../src/runtime/controller";
 import { runCanvas } from "../helpers/run";
 import { UsageModel } from "../helpers/usageModel";
 
@@ -258,5 +263,90 @@ describe("controller", () => {
     expect(signals[0]).toBeInstanceOf(AbortSignal);
     expect(signals[0]?.aborted).toBe(true);
     expect(run.graph.h.status).toBe(CannoliObjectStatus.Warning);
+  });
+
+  it("a run given an already-stopped controller finishes stopped without running", async () => {
+    const { llm, seen } = hangingLlm();
+    const controller = new RunController();
+    controller.stop();
+    const { finished, stoppages } = await runCanvas(oneCall, {
+      isMock: false,
+      runArgs: { controller },
+      beforeStart: (r) => {
+        r.llm = llm as unknown as Run["llm"];
+      },
+    });
+
+    expect(finished).toBe(true);
+    expect(stoppages.map((s) => s.reason)).toEqual(["user"]);
+    expect(seen.signals).toHaveLength(0);
+  });
+
+  it("a finished run removes its abort listener", async () => {
+    const controller = new RunController();
+    const added: unknown[] = [];
+    const removed: unknown[] = [];
+    const { signal } = controller;
+    const add = signal.addEventListener.bind(signal);
+    const remove = signal.removeEventListener.bind(signal);
+    signal.addEventListener = ((type: string, fn: EventListener, o?: unknown) => {
+      if (type === "abort") added.push(fn);
+      add(type, fn, o as AddEventListenerOptions);
+    }) as typeof signal.addEventListener;
+    signal.removeEventListener = ((type: string, fn: EventListener, o?: unknown) => {
+      if (type === "abort") removed.push(fn);
+      remove(type, fn, o as EventListenerOptions);
+    }) as typeof signal.removeEventListener;
+
+    const contentOnly = {
+      nodes: [text("a", "hello", 0, 0, "6"), text("b", "", 300, 0, "6")],
+      edges: [edge("e1", "a", "b")],
+    };
+    const { finished, stoppages } = await runCanvas(contentOnly, {
+      runArgs: { controller },
+    });
+
+    expect(finished).toBe(true);
+    expect(stoppages.map((s) => s.reason)).toEqual(["complete"]);
+    expect(added.length).toBeGreaterThan(0);
+    for (const fn of added) expect(removed).toContain(fn);
+  });
+
+  it("raceAbort on an aborted signal still handles the promise's rejection", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const controller = new RunController();
+      controller.stop();
+      const late = Promise.reject(new Error("source saw the abort"));
+      await expect(raceAbort(late, controller.signal)).rejects.toBeInstanceOf(
+        StopError,
+      );
+      await sleep(20);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    expect(unhandled).toEqual([]);
+  });
+
+  it("an action's own fetch signal is kept alongside the run's", async () => {
+    const controller = new RunController();
+    const signals: (AbortSignal | null | undefined)[] = [];
+    const fetcher = withSignal(async (_url: string, options: RequestInit) => {
+      signals.push(options.signal);
+      return "";
+    }, controller.signal);
+    const own = new AbortController();
+    await fetcher("https://example.test", { signal: own.signal });
+    await fetcher("https://example.test");
+    own.abort();
+
+    // The action's own signal (e.g. its timeout) still aborts its request...
+    expect(signals[0]?.aborted).toBe(true);
+    expect(controller.signal.aborted).toBe(false);
+    // ...and a stop aborts both.
+    controller.stop();
+    expect(signals[1]?.aborted).toBe(true);
   });
 });
