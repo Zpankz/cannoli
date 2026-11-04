@@ -86,6 +86,10 @@ mobile has no Node) and lists any Node built-in imports or Node-only globals (`B
 Core exports `RunEventBus`, `RunEvent`, `BatchedPersistor`, and `PersistorEdit`.
 Subscribe before starting a run; the returned function unsubscribes. Each observer
 receives its own event copy, and observer failures cannot interrupt execution.
+Reentrant emissions queue until all observers receive the current event, keeping
+request/finish order consistent when an observer cancels. Model and iterator
+continuations recheck cancellation after awaiting even an already-resolved
+promise, so a terminated run cannot accept that late result.
 
 ```ts
 const events = new RunEventBus();

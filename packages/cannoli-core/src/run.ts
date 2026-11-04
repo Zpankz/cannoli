@@ -1229,9 +1229,11 @@ export class Run {
           if (this.isMock || !model) {
             const result = this.createMockFunctionResponse(request);
             call.finish();
+            if (signal.aborted) throw signal.reason;
             return result;
           }
           const result = await raceAbort(model.generate(input), signal);
+          if (signal.aborted) throw signal.reason;
           const completion = toLegacyResponse(result);
 
           if (verbose) {
@@ -1245,6 +1247,7 @@ export class Run {
 
           recordCall(this.usage, request.model, result.usage);
           call.finish(result.usage, result.ttftMs);
+          if (signal.aborted) throw signal.reason;
 
           invariant(completion, "No message returned");
 
@@ -1289,6 +1292,7 @@ export class Run {
           if (this.isMock || !model) {
             const result = this.createMockFunctionResponse(request);
             call.finish();
+            if (signal.aborted) throw signal.reason;
             return result;
           }
           // Only the LangChain port runs the goal agent (until P3.6).
@@ -1309,6 +1313,7 @@ export class Run {
             }),
             signal,
           );
+          if (signal.aborted) throw signal.reason;
           const completion = toLegacyResponse(result);
 
           if (verbose) {
@@ -1323,6 +1328,7 @@ export class Run {
           // An agent makes several model calls; their tokens aren't summed yet.
           recordCall(this.usage, request.model);
           call.finish(result.usage, result.ttftMs);
+          if (signal.aborted) throw signal.reason;
 
           invariant(completion, "No message returned");
 
@@ -1346,7 +1352,9 @@ export class Run {
       const call = this.observeCall(fromLegacyParams(request, signal), nodeId);
       if (signal.aborted) throw signal.reason;
       call.text("Mock response");
+      if (signal.aborted) throw signal.reason;
       call.finish();
+      if (signal.aborted) throw signal.reason;
       return "Mock response";
     }
     // A streaming call holds its limiter slot until the stream ends, not just
@@ -1377,6 +1385,7 @@ export class Run {
       if (signal.aborted) throw signal.reason;
       events = model.stream(input)[Symbol.asyncIterator]();
       const first = await raceAbort(events.next(), signal);
+      if (signal.aborted) throw signal.reason;
       started = true;
 
       const text = streamText(first, events, (u) => (tokens = u), call.text);
@@ -1393,6 +1402,7 @@ export class Run {
   /** Observe calls without allowing subscribers or split credentials into the engine path. */
   private observeCall(input: GenerateRequest, id: string) {
     this.begin();
+    if (this.callSignal.aborted) throw this.callSignal.reason;
     const callId = nanoid(16);
     const at = Date.now();
     const redact = streamRedactor(this.redactionSecrets);

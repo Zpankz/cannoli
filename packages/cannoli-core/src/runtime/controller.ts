@@ -40,6 +40,7 @@ export async function* abortableStream<T>(
   try {
     while (true) {
       const next = await raceAbort(iterator.next(), signal);
+      if (signal.aborted) throw signal.reason;
       if (next.done) {
         finished = true;
         return;

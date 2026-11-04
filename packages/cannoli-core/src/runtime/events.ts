@@ -41,6 +41,8 @@ export type RunEvent =
 /** Synchronous delivery in execution order. A failing observer cannot break a run. */
 export class RunEventBus {
   private readonly listeners = new Set<(event: RunEvent) => void>();
+  private readonly pending: RunEvent[] = [];
+  private delivering = false;
 
   subscribe(listener: (event: RunEvent) => void): () => void {
     this.listeners.add(listener);
@@ -50,12 +52,26 @@ export class RunEventBus {
   }
 
   emit(event: RunEvent): void {
-    for (const listener of [...this.listeners]) {
-      try {
-        listener(structuredClone(event));
-      } catch {
-        /* Observers do not control execution. */
+    try {
+      this.pending.push(structuredClone(event));
+    } catch {
+      return;
+    }
+    if (this.delivering) return;
+    this.delivering = true;
+    try {
+      for (const queued of this.pending) {
+        for (const listener of [...this.listeners]) {
+          try {
+            listener(structuredClone(queued));
+          } catch {
+            /* Observers do not control execution. */
+          }
+        }
       }
+    } finally {
+      this.pending.length = 0;
+      this.delivering = false;
     }
   }
 }
