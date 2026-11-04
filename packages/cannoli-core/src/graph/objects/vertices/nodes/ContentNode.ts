@@ -100,6 +100,12 @@ export class ContentNode extends CannoliNode {
 
     content = this.filterName(content);
 
+    // A chat-response edge carries one streamed chunk at a time: append it,
+    // so the node builds up the reply (and keeps it if the run is stopped).
+    if (this.isChatResponseTarget()) {
+      content = this.getContentCheckName() + content;
+    }
+
     if (
       this.type === ContentNodeType.Output ||
       this.type === ContentNodeType.Formatter ||
@@ -140,6 +146,15 @@ export class ContentNode extends CannoliNode {
 
   logDetails(): string {
     return super.logDetails() + `Type: Content\n`;
+  }
+
+  /** True when this node's content comes from a streaming chat-response edge. */
+  private isChatResponseTarget(): boolean {
+    return this.getIncomingEdges().some(
+      (edge) =>
+        edge.type === EdgeType.ChatResponse &&
+        this.graph[edge.id].status === CannoliObjectStatus.Complete,
+    );
   }
 
   getWriteOrLoggingContent(): string | null {
