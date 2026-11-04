@@ -13,6 +13,8 @@ export interface AiSdkProviderConfig {
   /** What requests name the provider by: the ref prefix, or a legacy provider id. */
   id: string;
   kind: ProviderId;
+  /** Model used when a legacy call omits its model. */
+  defaultModel?: string;
   apiKey?: string;
   baseURL?: string;
   headers?: Record<string, string>;
@@ -39,7 +41,27 @@ export function createProviderModel(
   fetch?: typeof globalThis.fetch,
 ): LanguageModel {
   const { apiKey, headers } = config;
-  const baseURL = config.baseURL || undefined;
+  let baseURL = config.baseURL || undefined;
+  // Provider packages append endpoint paths to baseURL as a string. Keep the
+  // query at the transport boundary so it follows the completed endpoint path.
+  if (baseURL) {
+    const url = new URL(baseURL);
+    const query = new URLSearchParams(url.search);
+    url.search = "";
+    url.hash = "";
+    baseURL = url.href.replace(/\/+$/, "");
+    if (query.size) {
+      const transport = fetch ?? globalThis.fetch;
+      fetch = (input, init) => {
+        const target = new URL(input instanceof Request ? input.url : input);
+        query.forEach((value, key) => target.searchParams.append(key, value));
+        return transport(
+          input instanceof Request ? new Request(target, input) : target.href,
+          init,
+        );
+      };
+    }
+  }
   switch (config.kind) {
     case "anthropic":
       return createAnthropic({
@@ -54,8 +76,8 @@ export function createProviderModel(
       })(modelId);
     case "openai": {
       const openai = createOpenAI({ apiKey, baseURL, headers, fetch });
-      // Endpoints other than OpenAI's rarely serve the Responses API.
-      return baseURL ? openai.chat(modelId) : openai(modelId);
+      // Chat preserves the legacy stop, seed and penalty controls.
+      return openai.chat(modelId);
     }
     case "google":
       return createGoogle({ apiKey, baseURL, headers, fetch })(modelId);
@@ -113,6 +135,7 @@ export function providersFromLegacyConfigs(
       config.provider === "groq"
         ? { id, kind: "openai-compatible" }
         : { id, kind: id as ProviderId };
+    if (config.model) provider.defaultModel = config.model;
     if (config.apiKey) provider.apiKey = config.apiKey;
     if (config.provider === "groq") provider.baseURL = GROQ_BASE_URL;
     // Legacy gemini ignores baseURL; keep that.

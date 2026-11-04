@@ -48,12 +48,16 @@ export function makeObsidianFetch(
     }
     const body = request.body ? await request.arrayBuffer() : undefined;
     signal.throwIfAborted();
-    let stream = options.stream ?? false;
+    const endpoint = new URL(url);
+    let stream =
+      options.stream ??
+      (endpoint.pathname.endsWith(":streamGenerateContent") &&
+        endpoint.searchParams.get("alt") === "sse");
     if (options.stream === undefined && body) {
       try {
-        stream = JSON.parse(new TextDecoder().decode(body)).stream === true;
+        stream ||= JSON.parse(new TextDecoder().decode(body)).stream === true;
       } catch {
-        // A non-JSON request is buffered unless explicitly marked streaming.
+        // URL-based streaming does not require a JSON stream flag.
       }
     }
     if (stream) {
