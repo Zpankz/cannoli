@@ -574,10 +574,11 @@ export class LLMProvider {
             inputTokens: (total?.inputTokens ?? 0) + usage.inputTokens,
             outputTokens: (total?.outputTokens ?? 0) + usage.outputTokens,
           };
+          // Report the running total now: a stop may end the stream early.
+          onUsage?.(total);
         }
         yield messageText(chunk);
       }
-      if (total) onUsage?.(total);
     })();
   };
 

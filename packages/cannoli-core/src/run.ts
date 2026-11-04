@@ -410,6 +410,14 @@ export class Run {
       await this.persistor.start(JSON.parse(JSON.stringify(this.canvasData)));
     }
 
+    // Stopped before or during startup: run nothing. A stop during the await
+    // above has already finished the run; the abort event doesn't replay for
+    // one before it.
+    if (this.controller.signal.aborted) {
+      if (!this.stopTime) this.stopped();
+      return;
+    }
+
     // Setup listeners
     this.setupListeners();
 
@@ -418,12 +426,6 @@ export class Run {
 
     // Validate the graph
     this.validate();
-
-    // Stopped before it started (the abort event doesn't replay): run nothing.
-    if (this.controller.signal.aborted) {
-      this.stopped();
-      return;
-    }
 
     // Never send a secret value to an LLM: fail before any call executes.
     const secretLint = this.canvasData
