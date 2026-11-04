@@ -1055,6 +1055,13 @@ export default class Cannoli extends Plugin {
       ...(this.settings.enableVision !== undefined
         ? { enableVision: this.settings.enableVision }
         : {}),
+      // The LLM concurrency limit is a setting of this vault, so baked
+      // cannolis don't carry it.
+      ...(!forBake &&
+      Number.isInteger(this.settings.pLimit) &&
+      this.settings.pLimit > 0
+        ? { pLimit: this.settings.pLimit }
+        : {}),
     };
   };
 
