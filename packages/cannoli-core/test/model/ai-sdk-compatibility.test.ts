@@ -130,6 +130,9 @@ describe("legacy AI SDK compatibility on the wire", () => {
           provider: "ollama",
           model: "configured:tag",
           baseURL: "http://localhost:11434",
+          temperature: 0,
+          max_tokens: 64,
+          stop: "END",
         },
         { provider: "openai", model: "gpt-4o", apiKey: "test" },
       ],
@@ -154,7 +157,21 @@ describe("legacy AI SDK compatibility on the wire", () => {
     for await (const _chunk of stream) {
       /* drain */
     }
-    await run.callLLM({ provider: "ollama", model: "override:tag", messages });
+    for (const request of requests.slice(0, 2)) {
+      expect(request.body).toMatchObject({
+        temperature: 0,
+        max_tokens: 64,
+        stop: ["END"],
+      });
+    }
+    await run.callLLM({
+      provider: "ollama",
+      model: "override:tag",
+      temperature: 0.7,
+      max_tokens: 32,
+      stop: "OVERRIDE",
+      messages,
+    });
     expect(requests.map((r) => r.body.model)).toEqual([
       "configured:tag",
       "configured:tag",
@@ -162,6 +179,11 @@ describe("legacy AI SDK compatibility on the wire", () => {
       "configured:tag",
       "override:tag",
     ]);
+    expect(requests.at(-1)?.body).toMatchObject({
+      temperature: 0.7,
+      max_tokens: 32,
+      stop: ["OVERRIDE"],
+    });
   });
 
   it.each([false, true])(
