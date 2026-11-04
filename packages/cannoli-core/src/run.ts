@@ -435,7 +435,8 @@ export class Run {
       : undefined;
     if (secretLint) {
       await this.persistor?.addError(secretLint.nodeId, secretLint.message);
-      this.handleFinish("error", secretLint.message);
+      // A stop during the write has already finished the run.
+      if (!this.stopTime) this.handleFinish("error", secretLint.message);
       return;
     }
 
