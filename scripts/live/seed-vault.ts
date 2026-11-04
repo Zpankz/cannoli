@@ -2,7 +2,7 @@
 // Creates (or resets) the live test vault under .scratch/live/vault: seed canvases plus
 // Cannoli settings for the local Ollama provider (no API key). Re-running rewrites the seed
 // canvases, so runs always start from empty output nodes; other vault files are left alone,
-// except College/, which is reset to the Cannoli College assets (see the end of this file).
+// except Cannoli College/, which is reset to the plugin's assets (see the end of this file).
 // Env: CANNOLI_LIVE_DIR (default <repo>/.scratch/live), OLLAMA_URL, OLLAMA_MODEL, SEED_COLLEGE.
 import { mkdirSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -143,13 +143,14 @@ console.log(
   }),
 );
 
-// ---- College: the 36 Cannoli College canvases (plus their example notes) under College/ ----
-// Source: packages/cannoli-plugin/assets/Cannoli College. Runs mutate canvases, so every seed
-// rewrites each file from the source and deletes anything else under College/ (pristine reset).
-// Env: SEED_COLLEGE=0 skips this section.
+// ---- College: the 36 Cannoli College canvases (plus their example notes) ----
+// Source: packages/cannoli-plugin/assets/Cannoli College, copied to the same folder name the
+// plugin's "Add Cannoli College" uses, because file nodes embed "Cannoli College/…" paths.
+// Runs mutate canvases, so every seed rewrites each file from the source and deletes anything
+// else under Cannoli College/ (pristine reset). Env: SEED_COLLEGE=0 skips this section.
 if (process.env.SEED_COLLEGE !== "0") {
   const src = join(root, "packages/cannoli-plugin/assets/Cannoli College");
-  const dest = join(vault, "College");
+  const dest = join(vault, "Cannoli College");
   const walk = (dir: string, rel = ""): string[] =>
     readdirSync(join(dir, rel), { withFileTypes: true }).flatMap((e) =>
       e.isDirectory()

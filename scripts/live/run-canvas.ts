@@ -1,4 +1,4 @@
-// usage: CANVAS="College/1. Basics/1. Hello world.canvas" EXPECT=scripts/live/expect/x.json bun scripts/live/run-canvas.ts
+// usage: CANVAS="Cannoli College/1. Basics/1. Hello world.canvas" EXPECT=scripts/live/expect/x.json bun scripts/live/run-canvas.ts
 // Runs one canvas in the already-running isolated Obsidian (see run-canvas.sh for the full
 // build → seed → install → launch wrapper) and checks the result:
 //   open CANVAS → run CMD → wait until the run's final notice is shown and runningCannolis is

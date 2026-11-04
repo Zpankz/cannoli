@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Live run of one canvas with assertions: build → seed (resets Smoke/ and College/ canvases) →
+# Live run of one canvas with assertions: build → seed (resets Smoke/ and Cannoli College/) →
 # install → launch the isolated Obsidian → check the model is served → run-canvas.ts.
-# Usage: CANVAS="College/1. Basics/1. Hello world.canvas" EXPECT=scripts/live/expect/hello-world.json \
+# Usage: CANVAS="Cannoli College/1. Basics/1. Hello world.canvas" EXPECT=scripts/live/expect/hello-world.json \
 #          CDP_PORT=9349 bash scripts/live/run-canvas.sh
 # Env: SKIP_BUILD=1, SKIP_SEED=1 (keep the vault as is), plus everything run-canvas.ts reads
 # (EXPECT_JSON, CMD, WAIT_FOR, RUN_TIMEOUT, SETTLE, SHOT). Leaves the instance running.
