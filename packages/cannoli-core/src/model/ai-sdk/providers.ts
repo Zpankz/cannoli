@@ -1,3 +1,4 @@
+import type { ModelFetch } from "../fetch";
 // AI SDK provider factories (DESIGN §4.4, P1.3). Every factory gets the
 // host's fetch, so the plugin can route calls through Obsidian.
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -38,7 +39,7 @@ function anthropicBaseURL(baseURL: string): string {
 export function createProviderModel(
   config: AiSdkProviderConfig,
   modelId: string,
-  fetch?: typeof globalThis.fetch,
+  fetch?: ModelFetch,
 ): LanguageModel {
   const { apiKey, headers } = config;
   let baseURL = config.baseURL || undefined;
@@ -62,6 +63,9 @@ export function createProviderModel(
       };
     }
   }
+  // SDK declarations refer to the global fetch type. Some runtimes augment it
+  // with static helpers; provider factories only call the transport itself.
+  const sdkFetch = fetch as typeof globalThis.fetch | undefined;
   switch (config.kind) {
     case "anthropic":
       return createAnthropic({
@@ -72,17 +76,26 @@ export function createProviderModel(
           ...headers,
           "anthropic-dangerous-direct-browser-access": "true",
         },
-        fetch,
+        fetch: sdkFetch,
       })(modelId);
     case "openai": {
-      const openai = createOpenAI({ apiKey, baseURL, headers, fetch });
+      const openai = createOpenAI({
+        apiKey,
+        baseURL,
+        headers,
+        fetch: sdkFetch,
+      });
       // Chat preserves the legacy stop, seed and penalty controls.
       return openai.chat(modelId);
     }
     case "google":
-      return createGoogle({ apiKey, baseURL, headers, fetch })(modelId);
+      return createGoogle({ apiKey, baseURL, headers, fetch: sdkFetch })(
+        modelId,
+      );
     case "openrouter":
-      return createOpenRouter({ apiKey, baseURL, headers, fetch })(modelId);
+      return createOpenRouter({ apiKey, baseURL, headers, fetch: sdkFetch })(
+        modelId,
+      );
     case "ollama":
       return createOpenAICompatible({
         name: "ollama",
@@ -90,7 +103,7 @@ export function createProviderModel(
         apiKey,
         headers,
         includeUsage: true,
-        fetch,
+        fetch: sdkFetch,
       })(modelId);
     case "openai-compatible":
       if (!baseURL) {
@@ -104,7 +117,7 @@ export function createProviderModel(
         apiKey,
         headers,
         includeUsage: true,
-        fetch,
+        fetch: sdkFetch,
       })(modelId);
   }
 }

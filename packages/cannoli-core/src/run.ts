@@ -1,3 +1,4 @@
+import type { ModelFetch } from "./model/fetch";
 import pLimit from "p-limit";
 import {
   AllVerifiedCannoliCanvasNodeData,
@@ -257,7 +258,7 @@ export interface RunArgs {
    */
   providerEngine?: "ai-sdk" | "langchain";
   /** The fetch AI SDK providers use, e.g. one that goes through the host. */
-  modelFetch?: typeof fetch;
+  modelFetch?: ModelFetch;
 }
 
 export class Run {
@@ -292,7 +293,7 @@ export class Run {
   private aiSdkPort: AiSdkModelPort | null = null;
   private readonly llmConfigs: LLMConfig[];
   readonly providerEngine: "ai-sdk" | "langchain";
-  private readonly modelFetch?: typeof fetch;
+  private readonly modelFetch?: ModelFetch;
   llmLimit: Limit = pLimit(1000);
   persistor: Persistor | null = null;
   isMock: boolean = false;
