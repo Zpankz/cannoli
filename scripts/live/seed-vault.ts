@@ -129,6 +129,25 @@ canvases["Smoke/parallel.canvas"] = {
     edge("merge", "call", "output", "-"),
   ],
 };
+// (P1.1) a long reply streamed over a green ("4") chat-response arrow into "output", so a stop
+// lands mid-generation. Expectations: scripts/live/expect/long-stop.json (with STOP_AFTER_MS).
+canvases["Smoke/long.canvas"] = {
+  nodes: [
+    node(
+      "prompt",
+      "Write an 800-word story about a lighthouse keeper. Plain paragraphs, no headings.",
+      0,
+      0,
+      "6",
+    ),
+    node("call", "", 360, 0),
+    node("output", "", 720, 0, "6"),
+  ],
+  edges: [
+    edge("e1", "prompt", "call"),
+    edge("e2", "call", "output", undefined, "4"),
+  ],
+};
 // (P0.2) a node carrying the engine's `cannoli` metadata field; checks whether Obsidian keeps it on edit.
 // Expectations: scripts/live/expect/meta-preserve.json.
 canvases["Smoke/meta.canvas"] = {

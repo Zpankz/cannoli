@@ -14,6 +14,9 @@
 //   WAIT_FOR      run (default) | none — "none" just waits SETTLE ms after CMD (non-run commands)
 //   RUN_TIMEOUT   seconds before the run is stopped and the check fails (default 300)
 //   SETTLE        ms the canvas file must stay unchanged before it is read (default 1500)
+//   STOP_AFTER_MS stop the run this many ms after CMD by running CMD again (the user's stop);
+//                 fails unless "Cannoli stopped:" shows and the run is gone within 1 s
+//                 (unset: no stop)
 //   SHOT          screenshot path (default .scratch/live/shots/<canvas>-<time>.png)
 //   CDP_PORT, CANNOLI_LIVE_DIR as for the other scripts/live tools.
 // A JSON report (outcome, notices, results, console errors, screenshot) is written to
@@ -45,6 +48,13 @@ const cmd = process.env.CMD ?? `${pluginId}:start`;
 const waitFor = process.env.WAIT_FOR ?? "run";
 const timeoutMs = Number(process.env.RUN_TIMEOUT ?? 300) * 1000;
 const settleMs = Number(process.env.SETTLE ?? 1500);
+const stopAfterMs = process.env.STOP_AFTER_MS
+  ? Number(process.env.STOP_AFTER_MS)
+  : undefined;
+if (stopAfterMs !== undefined && !(stopAfterMs >= 0))
+  usage(`STOP_AFTER_MS must be a number of ms, got ${process.env.STOP_AFTER_MS}`);
+let stoppedAt: string | undefined;
+let stopLatencyMs: number | null | undefined;
 const d = new Date(),
   pad = (n: number) => String(n).padStart(2, "0");
 const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
@@ -258,6 +268,30 @@ try {
       );
     console.log(`run-canvas: ${canvasPath} ← ${cmd} (port ${port})`);
 
+    if (stopAfterMs !== undefined) {
+      // Stop the run the way a user does: run the start command again on the running canvas.
+      // Then time how long the "Cannoli stopped:" notice and an empty runningCannolis take.
+      await sleep(stopAfterMs);
+      stoppedAt = new Date().toISOString();
+      stopLatencyMs = await js<number | null>(`
+        const t = performance.now();
+        app.commands.executeCommandById(${JSON.stringify(cmd)});
+        const p = app.plugins.plugins[${ID}];
+        while (performance.now() - t < 10000) {
+          if (window.__cannoliLive.notices.some(n => /^Cannoli stopped:/.test(n)) &&
+              !Object.keys(p.runningCannolis ?? {}).length) return Math.round(performance.now() - t);
+          await new Promise(r => setTimeout(r, 10));
+        }
+        return null;`);
+      console.log(
+        `run-canvas: stopped after ${stopAfterMs} ms at ${stoppedAt}; "Cannoli stopped:" after ${stopLatencyMs ?? "> 10000"} ms`,
+      );
+      if (stopLatencyMs === null || stopLatencyMs > 1000)
+        throw new Error(
+          `the run did not stop within 1 s (${stopLatencyMs ?? "> 10000"} ms)`,
+        );
+    }
+
     if (waitFor === "run") {
       const deadline = Date.now() + timeoutMs;
       let outcome;
@@ -342,6 +376,9 @@ await Bun.write(
       failure,
       outcome: runOutcome(notices),
       durationMs: Date.now() - t0,
+      ...(stopAfterMs !== undefined
+        ? { stopAfterMs, stoppedAt, stopLatencyMs }
+        : {}),
       notices,
       results: report.results,
       consoleErrors,
