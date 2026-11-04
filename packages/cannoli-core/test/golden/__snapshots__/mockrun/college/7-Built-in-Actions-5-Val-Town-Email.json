@@ -5,23 +5,18 @@
       "reason": "error",
       "message": "Could not get HTTP template with name \"[valtown-email]\nHey,\nLemme know when you're free.\n\nSee you when I see you,\nTony\" from floating nodes or pre-set templates.",
       "results": {},
-      "usage": {
-        "mock-model": {
-          "numberOfCalls": 1,
-          "promptTokens": 12.25
-        }
-      }
+      "usage": {}
     }
   ],
   "statuses": {
     "096fe78f8953a6c7": "error",
-    "15f3a210252c5f5b": "complete",
+    "15f3a210252c5f5b": "executing",
     "7f1cf8283ccfede1": "pending",
     "8834acb33b5b05a2": "complete",
     "8c5767aa3f7ca516": "complete",
-    "913b0d8d220c7bd0": "error",
-    "9479867c29fc61c3-body": "complete",
-    "9479867c29fc61c3-subject": "complete",
+    "913b0d8d220c7bd0": "pending",
+    "9479867c29fc61c3-body": "pending",
+    "9479867c29fc61c3-subject": "pending",
     "a5620842eb411ddb": "complete",
     "b65bae1aca259538": "complete",
     "bd1323cef1df06fa": "complete",
@@ -70,11 +65,11 @@
           "kind": "node",
           "originalObject": null,
           "references": [],
-          "status": "complete",
+          "status": "executing",
           "text": "Write a brief email of greeting in Swahili",
           "type": "form"
         },
-        "color": "4",
+        "color": "3",
         "id": "15f3a210252c5f5b",
         "type": "text"
       },
@@ -144,7 +139,7 @@
           "kind": "node",
           "originalObject": null,
           "references": [],
-          "status": "error",
+          "status": "pending",
           "text": "valtown-email",
           "type": "http"
         },
@@ -192,7 +187,6 @@
       {
         "cannoliData": {
           "addMessages": false,
-          "content": "Mock answer",
           "crossingInGroups": [],
           "crossingOutGroups": [],
           "dependencies": [
@@ -201,7 +195,7 @@
           "isReflexive": false,
           "kind": "edge",
           "originalObject": null,
-          "status": "complete",
+          "status": "pending",
           "text": "body",
           "type": "field"
         },
@@ -214,7 +208,6 @@
       {
         "cannoliData": {
           "addMessages": false,
-          "content": "Mock answer",
           "crossingInGroups": [],
           "crossingOutGroups": [],
           "dependencies": [
@@ -223,7 +216,7 @@
           "isReflexive": false,
           "kind": "edge",
           "originalObject": null,
-          "status": "complete",
+          "status": "pending",
           "text": "subject",
           "type": "field"
         },

@@ -111,12 +111,18 @@ text updates flush every 250 ms, and status changes flush on the next tick.
 Executing snapshots remain visible for at least 300 ms; only persistence waits,
 so the graph continues scheduling immediately. Finish/cancel callbacks and the
 `run-finish` event occur after the final flush; persistence failure reports an
-error rather than successful completion. Hosts may implement optional
+error rather than successful completion. Terminal runs cancel their remaining model
+calls and settle their call events before reporting final usage. Usage includes
+only what providers reported before cancellation; late responses from providers
+that ignore cancellation are discarded. A run's internal cancellation leaves
+its parent's shared controller available. Hosts may implement optional
 `applyBatch(edits)` for one atomic transaction per flush and `flush()` to await
 their own write queues. Existing Persistor methods remain supported.
 
 The Obsidian CanvasPersistor uses one `vault.process` callback per batch, merges
-against the current file, and keeps current node geometry and unknown fields.
+against the current file, and updates only runtime text, label, colour and cannoliData on existing objects.
+Current geometry, routing and extension fields stay authoritative; new objects
+retain their full snapshots.
 No batching setting or settings migration is required. Verify with
 `pnpm --filter @deablabs/cannoli-core exec vitest run test/run/batched.test.ts test/run/events.test.ts`
 and `pnpm --filter cannoli-plugin exec vitest run test/canvas.test.ts`.

@@ -98,6 +98,7 @@ function redactKeys(obj: Obj, keys: string[], pairs: SecretPairs): Obj {
 /** Deep-copy `value`, redacting every string in it (free-form data only). */
 function redactDeep(value: unknown, pairs: SecretPairs): unknown {
   if (typeof value === "string") return redactText(value, pairs);
+  if (value instanceof URL) return redactText(value.href, pairs);
   if (Array.isArray(value)) return value.map((v) => redactDeep(v, pairs));
   if (isObj(value)) {
     const out: Obj = {};
@@ -105,6 +106,11 @@ function redactDeep(value: unknown, pairs: SecretPairs): unknown {
     return out;
   }
   return value;
+}
+
+/** Event-only copy: URLs and metadata must not inherit transport redaction exemptions. */
+export function redactEventData<T>(value: T, secrets: SecretResolver): T {
+  return redactDeep(value, secretPairs(secrets)) as T;
 }
 
 function redactMessage(message: unknown, pairs: SecretPairs): unknown {

@@ -4,6 +4,7 @@ import {
   redactingPersistor,
   redactRequest,
   redactSecrets,
+  redactEventData,
 } from "../src/runtime/redact";
 import { secretResolverFromRecord, withProviderKeys } from "../src/secrets";
 import { runCanvas } from "./helpers/run";
@@ -36,6 +37,22 @@ afterEach(() => {
 });
 
 describe("redaction", () => {
+  it("redacts URL objects and nested event metadata without mutating transport data", () => {
+    const url = new URL("https://example.test/image?key=secret-credential");
+    const original = {
+      image: url,
+      metadata: { nested: [{ token: "secret-credential" }] },
+    };
+    const copy = redactEventData(
+      original,
+      secretResolverFromRecord({ KEY: "secret-credential" }),
+    );
+    expect(copy.image).toBe("https://example.test/image?key=«secret:KEY»");
+    expect(copy.metadata.nested[0].token).toBe("«secret:KEY»");
+    expect(original.image.href).toContain("secret-credential");
+    expect(original.metadata.nested[0].token).toBe("secret-credential");
+  });
+
   it("redacts provider keys even when their synthetic name is already a user secret", () => {
     const secrets = withProviderKeys(
       secretResolverFromRecord({ "provider-key-ollama": "user-secret-value" }),

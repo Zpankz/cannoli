@@ -42,6 +42,7 @@ import {
   redactingPersistor,
   redactRequest,
   streamRedactor,
+  redactEventData,
 } from "./runtime/redact";
 import { BatchedPersistor } from "./runtime/batched-persistor";
 import { RunEventBus } from "./runtime/events";
@@ -265,7 +266,10 @@ export class Run {
   /** Stable FNV-1a canvas fingerprint, not a cryptographic integrity check. */
   private readonly canvasHash: string;
   private began = false;
+  private completionPending = false;
   private readonly eventUsage: Usage = { inputTokens: 0, outputTokens: 0 };
+  private readonly callAbort = new AbortController();
+  private readonly callSignal: AbortSignal;
   graph: Record<string, CannoliObject> = {};
   onFinish: (stoppage: Stoppage) => void;
   canvasData: VerifiedCannoliCanvasData | null = null;
@@ -346,6 +350,10 @@ export class Run {
     this.canvasPath = canvasPath ?? "";
     this.canvasHash = seedFromCanvas(cannoli).toString(16).padStart(8, "0");
     this.controller = controller ?? new RunController();
+    this.callSignal = AbortSignal.any([
+      this.controller.signal,
+      this.callAbort.signal,
+    ]);
     this.controller.signal.addEventListener("abort", this.onAbort, {
       once: true,
     });
@@ -502,6 +510,10 @@ export class Run {
 
   async start() {
     this.begin();
+    if (this.callSignal.aborted) {
+      if (this.stopTime === null) this.stopped();
+      return;
+    }
     // Log the graph
     // this.logGraph();
 
@@ -707,10 +719,27 @@ export class Run {
 
   private handleFinish(reason: StoppageReason, message?: string) {
     if (this.stopTime !== null) return;
+    if (reason === "complete") {
+      if (this.completionPending) return;
+      this.completionPending = true;
+      // Dependency listeners finish downstream objects synchronously before
+      // their upstream Run listeners enqueue the last snapshots.
+      queueMicrotask(() => this.finalizeFinish(reason, message));
+      return;
+    }
+    this.finalizeFinish(reason, message);
+  }
+
+  private finalizeFinish(reason: StoppageReason, message?: string) {
+    if (this.stopTime !== null) return;
     this.begin();
+    if (this.stopTime !== null) return;
     this.stopTime = Date.now();
     // Sub-cannolis share the parent's controller; don't keep finished ones alive.
     this.controller.signal.removeEventListener("abort", this.onAbort);
+    // Cancel this run's calls without aborting a controller shared by its parent.
+    this.callAbort.abort(new Error(message ?? "Run finished"));
+    for (const settle of [...this.openStreams]) settle();
 
     const finish = (failure?: unknown) => {
       if (failure) {
@@ -1189,12 +1218,13 @@ export class Run {
     request = redactRequest(request, this.redactionSecrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
-        const signal = this.controller.signal;
+        const signal = this.callSignal;
         let call: ReturnType<Run["observeCall"]> | undefined;
         try {
           if (signal.aborted) throw signal.reason;
           const input = fromLegacyParams(this.modelRequest(request), signal);
           call = this.observeCall(input, nodeId);
+          if (signal.aborted) throw signal.reason;
           const model = this.model;
           if (this.isMock || !model) {
             const result = this.createMockFunctionResponse(request);
@@ -1248,12 +1278,13 @@ export class Run {
     request = redactRequest(request, this.redactionSecrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
-        const signal = this.controller.signal;
+        const signal = this.callSignal;
         let call: ReturnType<Run["observeCall"]> | undefined;
         try {
           if (signal.aborted) throw signal.reason;
           const input = fromLegacyParams(request, signal);
           call = this.observeCall(input, nodeId);
+          if (signal.aborted) throw signal.reason;
           const model = this.model;
           if (this.isMock || !model) {
             const result = this.createMockFunctionResponse(request);
@@ -1307,15 +1338,13 @@ export class Run {
   }
 
   async callLLMStream(request: GenericCompletionParams, nodeId = "") {
-    const signal = this.controller.signal;
+    const signal = this.callSignal;
     if (signal.aborted) throw signal.reason;
     request = redactRequest(request, this.redactionSecrets);
     const model = this.model;
     if (this.isMock || !model) {
-      const call = this.observeCall(
-        fromLegacyParams(request, this.controller.signal),
-        nodeId,
-      );
+      const call = this.observeCall(fromLegacyParams(request, signal), nodeId);
+      if (signal.aborted) throw signal.reason;
       call.text("Mock response");
       call.finish();
       return "Mock response";
@@ -1345,6 +1374,7 @@ export class Run {
       if (signal.aborted) throw signal.reason;
       const input = fromLegacyParams(this.modelRequest(request), signal);
       call = this.observeCall(input, nodeId);
+      if (signal.aborted) throw signal.reason;
       events = model.stream(input)[Symbol.asyncIterator]();
       const first = await raceAbort(events.next(), signal);
       started = true;
@@ -1368,19 +1398,6 @@ export class Run {
     const redact = streamRedactor(this.redactionSecrets);
     let ttftMs: number | undefined;
     let done = false;
-    this.events.emit({
-      t: "model-request",
-      id,
-      callId,
-      model: input.model,
-      messages: [
-        ...(input.instructions
-          ? [{ role: "system" as const, content: input.instructions }]
-          : []),
-        ...input.messages,
-      ],
-      tools: input.tools?.map((t) => t.name),
-    });
     const text = (part: string) => {
       if (done || this.stopTime !== null) return;
       ttftMs ??= Date.now() - at;
@@ -1415,6 +1432,24 @@ export class Run {
       });
     };
     this.openStreams.add(finish);
+    this.events.emit(
+      redactEventData(
+        {
+          t: "model-request",
+          id,
+          callId,
+          model: input.model,
+          messages: [
+            ...(input.instructions
+              ? [{ role: "system" as const, content: input.instructions }]
+              : []),
+            ...input.messages,
+          ],
+          tools: input.tools?.map((t) => t.name),
+        },
+        this.redactionSecrets,
+      ),
+    );
     return { text, finish };
   }
 

@@ -63,6 +63,29 @@ describe("BatchedPersistor", () => {
     ]);
   });
 
+  it("keeps text deadlines independent of unrelated urgent status writes", async () => {
+    vi.useFakeTimers();
+    const { writes, batch } = sink();
+    await batch.editNode({ ...node("0"), id: "stream" });
+    await vi.advanceTimersByTimeAsync(0);
+    for (let i = 1; i <= 10; i++) {
+      await vi.advanceTimersByTimeAsync(100);
+      await batch.editNode({ ...node(String(i)), id: "stream" });
+      await batch.editNode({
+        ...node(String(i), i % 2 ? Status.Pending : Status.Complete),
+        id: "other",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    const stream = writes.filter((w) =>
+      w.edits.some((e) => e.type === "node" && e.node.id === "stream"),
+    );
+    expect(stream.length).toBeGreaterThanOrEqual(4);
+    for (let i = 1; i < stream.length; i++)
+      expect(stream[i].at - stream[i - 1].at).toBeLessThanOrEqual(250);
+    await batch.flush();
+  });
+
   it("status changes coalesce and flush next tick", async () => {
     vi.useFakeTimers();
     const { writes, batch } = sink();

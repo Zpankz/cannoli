@@ -17,7 +17,7 @@ export class BatchedPersistor implements Persistor {
   >();
   private timer?: ReturnType<typeof setTimeout>;
   private deadline = Infinity;
-  private lastWrite = -Infinity;
+  private readonly writtenAt = new Map<string, number>();
   private queue: Promise<void> = Promise.resolve();
   private failure?: unknown;
   private started = false;
@@ -30,6 +30,7 @@ export class BatchedPersistor implements Persistor {
     this.started = true;
     this.statuses.clear();
     this.writtenStatuses.clear();
+    this.writtenAt.clear();
     this.seenExecuting.clear();
     this.paints.clear();
     this.startup = this.target.start(data);
@@ -78,7 +79,9 @@ export class BatchedPersistor implements Persistor {
   ): Promise<void> {
     this.pending.set(key, structuredClone(edit));
     this.schedule(
-      urgent ? Date.now() : Math.max(Date.now(), this.lastWrite + 250),
+      urgent
+        ? Date.now()
+        : Math.max(Date.now(), (this.writtenAt.get(key) ?? -Infinity) + 250),
     );
     // Existing graph callers enqueue without awaiting. Errors are reported by flush().
     return Promise.resolve();
@@ -131,9 +134,12 @@ export class BatchedPersistor implements Persistor {
           !final &&
           (edit.type === "node" || edit.type === "edge") &&
           this.writtenStatuses.get(key) === status(edit) &&
-          Date.now() < this.lastWrite + 250
+          Date.now() < (this.writtenAt.get(key) ?? -Infinity) + 250
         ) {
-          nextPaint = Math.min(nextPaint, this.lastWrite + 250);
+          nextPaint = Math.min(
+            nextPaint,
+            (this.writtenAt.get(key) ?? -Infinity) + 250,
+          );
           continue;
         }
         chosen.push([key, edit]);
@@ -147,15 +153,16 @@ export class BatchedPersistor implements Persistor {
           const edits = chosen.map(([, edit]) => edit);
           if (this.target.applyBatch) await this.target.applyBatch(edits);
           else for (const edit of edits) await this.apply(edit);
-          this.lastWrite = Date.now();
+          const now = Date.now();
           for (const [key, edit] of chosen) {
+            this.writtenAt.set(key, now);
             if (edit.type === "node" || edit.type === "edge")
               this.writtenStatuses.set(key, status(edit));
           }
           for (const key of starting) {
             const paint = this.paints.get(key);
             if (paint) {
-              paint.until = this.lastWrite + 300;
+              paint.until = now + 300;
               nextPaint = Math.min(nextPaint, paint.until);
             }
           }
@@ -166,7 +173,13 @@ export class BatchedPersistor implements Persistor {
       }
       if (this.pending.size)
         this.schedule(
-          Number.isFinite(nextPaint) ? nextPaint : this.lastWrite + 250,
+          Number.isFinite(nextPaint)
+            ? nextPaint
+            : Math.min(
+                ...[...this.pending.keys()].map(
+                  (key) => (this.writtenAt.get(key) ?? -Infinity) + 250,
+                ),
+              ),
         );
     });
     return this.queue;

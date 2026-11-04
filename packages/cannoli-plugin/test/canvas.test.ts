@@ -101,6 +101,20 @@ describe("CanvasPersistor", () => {
     });
   });
 
+  it("retains changed unknown properties from the current file for nodes and edges", async () => {
+    const h = host();
+    const current = structuredClone(initial);
+    current.nodes[0].foreign = { keep: false };
+    current.edges[0].foreign = 99;
+    h.edit(JSON.stringify(current));
+    await h.persistor.applyBatch(edits);
+    expect(h.data().nodes[0]).toMatchObject({
+      text: "new",
+      foreign: { keep: false },
+    });
+    expect(h.data().edges[0]).toMatchObject({ label: "updated", foreign: 99 });
+  });
+
   it("start removes old diagnostics and merges in one transaction", async () => {
     const h = host();
     const data = structuredClone(initial);

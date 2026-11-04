@@ -95,8 +95,12 @@ export class CanvasPersistor implements Persistor {
     if (!this.allowCannoliData) delete node.cannoliData;
     const existing = data.nodes.find((n) => n.id === node.id);
     if (existing) {
-      const { x, y, width, height } = existing;
-      Object.assign(existing, node, { x, y, width, height });
+      this.mergeRuntimeFields(existing, node, [
+        "text",
+        "color",
+        "label",
+        "cannoliData",
+      ]);
     } else if (create) data.nodes.push(node);
   }
 
@@ -109,8 +113,21 @@ export class CanvasPersistor implements Persistor {
     const edge = structuredClone(source);
     if (!this.allowCannoliData) delete edge.cannoliData;
     const existing = data.edges.find((e) => e.id === edge.id);
-    if (existing) Object.assign(existing, edge);
+    if (existing)
+      this.mergeRuntimeFields(existing, edge, [
+        "label",
+        "color",
+        "cannoliData",
+      ]);
     else if (create) data.edges.push(edge);
+  }
+
+  private mergeRuntimeFields(
+    current: Record<string, unknown>,
+    update: Record<string, unknown>,
+    fields: string[],
+  ): void {
+    for (const key of fields) if (key in update) current[key] = update[key];
   }
 
   private mutate(edit: (data: CannoliCanvasData) => void): Promise<void> {
