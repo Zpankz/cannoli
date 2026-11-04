@@ -30,6 +30,7 @@ import { CannoliNode } from "./graph/objects/vertices/CannoliNode";
 import { parseNamedNode } from "./utility";
 import { resultsRun } from "./cannoli";
 import { nanoid } from "nanoid";
+import { createRng, pick, seedFromCanvas, type Rng } from "./util/rng";
 
 export interface HttpTemplate {
   id: string;
@@ -108,9 +109,7 @@ export type ResponseTextFetcher = (
 ) => Promise<string | Error>;
 
 interface Limit {
-  (
-    fn: () => Promise<GenericCompletionResponse | Error>,
-  ): Promise<GenericCompletionResponse | Error>;
+  <T>(fn: () => Promise<T>): Promise<T>;
 }
 
 export interface Stoppage {
@@ -149,6 +148,21 @@ export function isValidKey(
   return key in config;
 }
 
+/**
+ * Pass a stream through, calling release once it ends, fails or is closed
+ * early by the consumer.
+ */
+async function* releaseWhenDone<T>(
+  stream: AsyncIterable<T>,
+  release: () => void,
+): AsyncGenerator<T> {
+  try {
+    yield* stream;
+  } finally {
+    release();
+  }
+}
+
 export interface RunArgs {
   cannoli: unknown;
   llmConfigs?: LLMConfig[];
@@ -165,6 +179,8 @@ export interface RunArgs {
   replacers?: Replacer[];
   resume?: boolean;
   runName?: string;
+  /** Seeds the RNG that mock runs use for choices. Defaults to a hash of the canvas. */
+  seed?: number;
   cannoliServer?: {
     url: string;
     secret: string;
@@ -185,9 +201,11 @@ export class Run {
   httpTemplates: HttpTemplate[] = [];
   replacers: Replacer[] = [];
   llm: Llm | null = null;
-  llmLimit: Limit = () => Promise.resolve(new Error("No LLM provider"));
+  llmLimit: Limit = pLimit(1000);
   persistor: Persistor | null = null;
   isMock: boolean = false;
+  /** Randomness for mock runs, seeded so the same canvas makes the same choices. */
+  rng: Rng;
   stopTime: number | null = null;
   currentNote: string | null = null;
   selection: string | null = null;
@@ -225,9 +243,11 @@ export class Run {
     runName,
     resume,
     cannoliServer,
+    seed,
   }: RunArgs) {
     this.onFinish = onFinish ?? ((stoppage: Stoppage) => {});
     this.isMock = isMock ?? false;
+    this.rng = createRng(seed ?? seedFromCanvas(cannoli));
     this.persistor = persistor ?? null;
     this.usage = {};
     this.runId = `${nanoid(16)}${isMock ? "-mock" : ""}`;
@@ -272,14 +292,13 @@ export class Run {
       return;
     }
 
+    // Bounds concurrent model calls, streaming included (DESIGN §11.5).
     const limit = this.config?.pLimit ?? 1000;
-
-    // Check that the plimit is a number
-    if (typeof limit == "number") {
-      this.llmLimit = pLimit(limit);
-    } else {
-      this.llmLimit = pLimit(1000);
-    }
+    this.llmLimit = pLimit(
+      typeof limit === "number" && Number.isInteger(limit) && limit > 0
+        ? limit
+        : 1000,
+    );
 
     // Remove these properties from the args object without affecting the saved values
     if (this.args) {
@@ -744,7 +763,10 @@ export class Run {
       this.persistor.addError(object.id, message ?? "Unknown error");
     }
 
-    this.error(message ?? "Unknown error");
+    // Not this.error(): this runs inside the object's "update" event listener,
+    // where a throw can't reach the run. Browsers only log it, but Node's
+    // EventTarget re-raises it as an uncaught exception.
+    this.handleFinish("error", message ?? "Unknown error");
   }
 
   /**
@@ -790,10 +812,16 @@ export class Run {
             `${object.maxLoops}`,
           );
           return;
-        } else if (flag === "executing") {
+        }
+
+        // Nested parallel groups make maxLoops copies per copy of the
+        // enclosing group, so count the copies rather than using maxLoops.
+        const total = this.countParallelGroupCopies(originalGroupId);
+
+        if (flag === "executing") {
           this.persistor.editOriginalParallelGroupLabel(
             originalGroupId,
-            `0/${object.maxLoops}`,
+            `0/${total}`,
           );
           return;
         }
@@ -809,10 +837,25 @@ export class Run {
 
         this.persistor.editOriginalParallelGroupLabel(
           originalGroupId,
-          `${this.forEachTracker.get(originalGroupId)}/${object.maxLoops}`,
+          `${this.forEachTracker.get(originalGroupId)}/${total}`,
         );
       }
     }
+  }
+
+  /** How many parallel-group copies in the graph came from this canvas group. */
+  private countParallelGroupCopies(originalGroupId: string): number {
+    let count = 0;
+    for (const object of Object.values(this.graph)) {
+      if (
+        object instanceof CannoliGroup &&
+        object.fromForEach &&
+        object.originalObject === originalGroupId
+      ) {
+        count++;
+      }
+    }
+    return count;
   }
 
   allObjectsFinished(): boolean {
@@ -999,16 +1042,30 @@ export class Run {
       // Return mock stream
       return "Mock response";
     }
+    const llm = this.llm;
 
+    // A streaming call holds its limiter slot until the stream ends, not just
+    // until the stream object is returned (DESIGN §11.5).
+    const release = await this.acquireLlmSlot();
     try {
-      const response = await this.llm.getCompletionStream(request);
+      const response = await llm.getCompletionStream(request);
 
       invariant(response, "No message returned");
 
-      return response;
+      return releaseWhenDone(response, release);
     } catch (e) {
+      release();
       return e as Error;
     }
+  }
+
+  /** Wait for a free limiter slot; call the returned function to free it. */
+  private acquireLlmSlot(): Promise<() => void> {
+    return new Promise((acquired) => {
+      void this.llmLimit(
+        () => new Promise<void>((release) => acquired(() => release())),
+      );
+    });
   }
 
   createMockFunctionResponse(
@@ -1096,13 +1153,9 @@ export class Run {
       JSON.stringify(choiceFunction?.parameters?.["properties"] ?? {}),
     );
 
-    // Pick one of the choices randomly
+    // Pick one of the choices with the run's seeded RNG
     const randomChoice =
-      parsedProperties?.choice?.enum[
-        Math.floor(
-          Math.random() * (parsedProperties?.choice?.enum?.length ?? 0),
-        )
-      ] ?? "N/A";
+      pick(this.rng, parsedProperties?.choice?.enum) ?? "N/A";
 
     return {
       role: "assistant",
@@ -1140,28 +1193,22 @@ export class Run {
   }
 
   createMockNoteNameFunctionResponse(noteFunction: GenericFunctionCall) {
-    const args: { [key: string]: string }[] = [];
-
     const parsedProperties = JSON.parse(
       JSON.stringify(noteFunction?.parameters?.["properties"] ?? {}),
     );
 
-    // Pick one of the options in note.enum randomly
-    const randomNote =
-      parsedProperties?.note?.enum[
-        Math.random() * (parsedProperties?.note?.enum?.length ?? 0)
-      ] ?? "N/A";
+    // Pick one of the options in note.enum with the run's seeded RNG.
+    // (The index used to be unfloored, so this was almost always "N/A".)
+    const randomNote = pick(this.rng, parsedProperties?.note?.enum) ?? "N/A";
 
-    args.push({
-      note: randomNote,
-    });
-
+    // One object, like the real note_select tool call: CallNode parses the
+    // args as { note }. (They used to be an array, so mock runs failed here.)
     return {
       role: "assistant",
       content: "",
       function_call: {
         name: "note_select",
-        args: args,
+        args: { note: `${randomNote}` },
       },
     };
   }

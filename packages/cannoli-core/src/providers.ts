@@ -676,11 +676,10 @@ export class LLMProvider {
         content,
       };
     } catch (error) {
+      // Rethrow so the caller marks the node as errored with the real cause;
+      // returning nothing here used to surface as "No message returned".
       console.error("Error during agent execution:", error);
-      // // Tools throw ToolException for tool-specific errors
-      // if (error.name === "ToolException") {
-      //   console.error("Tool execution failed:", error.message);
-      // }
+      throw error;
     } finally {
       await Promise.all(disconnectCallbacks.map((cb) => cb()));
     }
