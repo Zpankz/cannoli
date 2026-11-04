@@ -137,6 +137,47 @@ describe("usage", () => {
     expect(reported.at(-1)).toEqual({ inputTokens: 9, outputTokens: 0 });
   });
 
+  it("a stop counts the active stream's usage before onFinish", async () => {
+    // Usage arrives on the first chunk; then the stream hangs until stopped.
+    const llm = {
+      initialized: true,
+      getMergedConfig: () => ({ model: "fake", provider: "ollama" }),
+      async getCompletionStream(_req: GenericCompletionParams, opts?: CallOptions) {
+        async function* chunks() {
+          opts?.onUsage?.({ inputTokens: 9, outputTokens: 1 });
+          yield "Once ";
+          await new Promise(() => {});
+        }
+        return chunks();
+      },
+    };
+    const streamOnly = {
+      nodes: [
+        text("sp", "Stream prompt", 0, 0, "6"),
+        text("sc", "", 300, 0),
+        text("so", "", 600, 0, "6"),
+      ],
+      edges: [edge("sa", "sp", "sc"), edge("sb", "sc", "so", "4")],
+    };
+    // Read synchronously inside onFinish, as a meter would.
+    const seen: string[] = [];
+    const run = new Run({
+      cannoli: streamOnly,
+      isMock: false,
+      onFinish: (s) => seen.push(JSON.stringify(s.usage)),
+    });
+    run.llm = llm as unknown as Run["llm"];
+    await run.start();
+    await sleep(30);
+    run.stop();
+    await sleep(20);
+
+    expect(seen).toHaveLength(1);
+    expect(JSON.parse(seen[0])).toEqual({
+      fake: { numberOfCalls: 1, promptTokens: 9, completionTokens: 1 },
+    });
+  });
+
   it("usage summed per run", async () => {
     const { finished, stoppages } = await runCanvas(canvas, {
       isMock: false,

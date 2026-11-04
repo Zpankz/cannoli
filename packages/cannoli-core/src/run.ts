@@ -232,6 +232,8 @@ export class Run {
   ) => Promise<Record<string, string>> = () => Promise.resolve({});
 
   usage: Record<string, ModelUsage>;
+  /** Streams still open, so a stop can count them before reporting usage. */
+  private readonly openStreams = new Set<() => void>();
 
   controller: RunController;
 
@@ -617,6 +619,8 @@ export class Run {
       return;
     }
     warnExecutingNodes(this, "Stopped by user");
+    // Count cut-off streams now: onFinish may read usage straight away.
+    for (const finish of [...this.openStreams]) finish();
     this.handleFinish("user");
   }
 
@@ -1112,11 +1116,13 @@ export class Run {
       if (done) return;
       done = true;
       signal.removeEventListener("abort", finish);
+      this.openStreams.delete(finish);
       acquired();
       // Like callLLM, count calls that got a response, even a partial one.
       if (started) recordCall(this.usage, request.model, tokens);
     };
     signal.addEventListener("abort", finish, { once: true });
+    this.openStreams.add(finish);
     try {
       if (signal.aborted) throw signal.reason;
       const response = await raceAbort(
