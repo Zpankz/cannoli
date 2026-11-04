@@ -320,7 +320,12 @@ export function evaluate(
       push(`node ${n.node}`, false, r.error);
       continue;
     }
-    const node = ctx.canvas.nodes.find((x) => x.id === r.id)!;
+    // A name can resolve through the pre-run canvas to a node the run removed.
+    const node = ctx.canvas.nodes.find((x) => x.id === r.id);
+    if (!node) {
+      push(`node ${n.node}`, false, `node ${r.id} is gone after the run`);
+      continue;
+    }
     const text = node.type === "group" ? (node.label ?? "") : (node.text ?? "");
     if (n.textMatches !== undefined) {
       const re = parseRegex(n.textMatches);

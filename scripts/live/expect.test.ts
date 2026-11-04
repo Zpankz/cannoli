@@ -138,6 +138,19 @@ describe("expect.ts", () => {
     expect(resolveNode(hello, "OUT", before)).toEqual({
       id: "bc1a550bbb4aac7b",
     });
+    // ...and if the run removed that node, the check fails instead of throwing.
+    const removed = {
+      ...hello,
+      nodes: hello.nodes.filter(
+        (n: { id: string }) => n.id !== "bc1a550bbb4aac7b",
+      ),
+    };
+    const gone = evaluate(
+      { nodes: [{ node: "OUT", textMatches: "x" }] },
+      { canvas: removed, before, notices: [] },
+    );
+    expect(gone.pass).toBe(false);
+    expect(gone.results[0].detail).toContain("gone after the run");
     const dup = {
       nodes: [
         { id: "a", type: "text", text: "x" },

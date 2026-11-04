@@ -3,10 +3,11 @@
 // build → seed → install → launch wrapper) and checks the result:
 //   open CANVAS → run CMD → wait until the run's final notice is shown and runningCannolis is
 //   empty → wait for the .canvas file to stop changing → screenshot → evaluate EXPECT (expect.ts)
-//   against the file on disk and the notices seen → print a report → exit 0 (pass) / 1 (fail).
+//   against the file on disk and the notices seen → print a report → exit 0 (pass) / 1 (fail,
+//   including harness failures once connected) / 2 (bad env or expectations, no canvas, no CDP).
 // Env:
 //   CANVAS        vault-relative path (required)
-//   EXPECT        expectations JSON file, or EXPECT_JSON inline; none = only "the run finished"
+//   EXPECT        expectations JSON file, or EXPECT_JSON inline; "run" defaults to "complete"
 //                 An expectations "edit" step (see expect.ts) is applied through the canvas
 //                 view API (setData/setText + requestSave) instead of running CMD, with no run.
 //   CMD           command id to run (default "<plugin id>:start", which acts on the open canvas)
@@ -73,6 +74,9 @@ if (expectations!.canvas && expectations!.canvas !== canvasPath)
   usage(
     `expectations are for canvas ${expectations!.canvas}, but CANVAS=${canvasPath}`,
   );
+// A run must end in "Cannoli complete" unless the expectations say otherwise
+// (set "run": "error" to expect a failure).
+if (!expectations!.edit && waitFor === "run") expectations!.run ??= "complete";
 
 const diskFile = join(vault, canvasPath!);
 if (!(await Bun.file(diskFile).exists()))
@@ -90,14 +94,33 @@ const page: CdpTarget | undefined = list.find(
     t.type === "page" && t.url.startsWith("app://obsidian.md/index.html"),
 );
 if (!page) usage(`no Obsidian page on CDP port ${port}`);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 let msgId = 0;
-const pending = new Map<number, (v: CdpResponse) => void>();
+// A dead socket or a hung page must fail the check, not hang the process.
+const cdpTimeoutMs = 60_000;
+const pending = new Map<
+  number,
+  { resolve: (v: CdpResponse) => void; reject: (e: Error) => void }
+>();
+let socketDown: Error | undefined;
+const failPending = (e: Error) => {
+  socketDown ??= e;
+  for (const p of pending.values()) p.reject(e);
+  pending.clear();
+};
 const consoleErrors: string[] = [];
+ws.onerror = () => failPending(new Error(`CDP socket error on port ${port}`));
+ws.onclose = () => failPending(new Error(`CDP socket closed on port ${port}`));
 ws.onmessage = (m) => {
   const d = JSON.parse(String(m.data));
-  if (d.id) pending.get(d.id)?.(d);
-  else if (d.method === "Runtime.consoleAPICalled" && d.params.type === "error")
+  if (d.id) {
+    pending.get(d.id)?.resolve(d);
+    pending.delete(d.id);
+  } else if (
+    d.method === "Runtime.consoleAPICalled" &&
+    d.params.type === "error"
+  )
     consoleErrors.push(
       d.params.args
         .map(
@@ -115,11 +138,26 @@ ws.onmessage = (m) => {
       ).slice(0, 500),
     );
 };
-await new Promise((r) => (ws.onopen = r));
+const socketOpen = await Promise.race([
+  new Promise<boolean>((r) => ws.addEventListener("open", () => r(true))),
+  new Promise<boolean>((r) => ws.addEventListener("close", () => r(false))),
+  sleep(10_000).then(() => false),
+]);
+if (!socketOpen) usage(`could not open the CDP socket on port ${port}`);
 const send = (method: string, params: CdpParams = {}) =>
-  new Promise<CdpResponse>((r) => {
+  new Promise<CdpResponse>((resolve, reject) => {
+    if (socketDown) return reject(socketDown);
     const i = ++msgId;
-    pending.set(i, r);
+    const timer = setTimeout(() => {
+      pending.delete(i);
+      reject(
+        new Error(`CDP ${method} timed out after ${cdpTimeoutMs / 1000}s`),
+      );
+    }, cdpTimeoutMs);
+    pending.set(i, {
+      resolve: (v) => (clearTimeout(timer), resolve(v)),
+      reject: (e) => (clearTimeout(timer), reject(e)),
+    });
     ws.send(JSON.stringify({ id: i, method, params }));
   });
 // T is what the page-side body returns; it is not checked at runtime.
@@ -137,7 +175,6 @@ const js = async <T = unknown>(body: string): Promise<T> => {
     );
   return r.result?.result?.value as T;
 };
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const P = JSON.stringify(canvasPath),
   ID = JSON.stringify(pluginId);
 const t0 = Date.now();
