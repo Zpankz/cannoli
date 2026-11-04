@@ -93,14 +93,8 @@ describe("browser-safe", () => {
       ).toBeGreaterThan(30);
     });
 
-    it("finds exactly the known CallNode Buffer use", () => {
-      expect(result!.findings).toEqual([
-        "global Buffer in src/graph/objects/vertices/nodes/CallNode.ts",
-      ]);
-    });
-
-    // Fails today: CallNode.ts uses Buffer. P0.4 adds util/base64.ts and flips this to `it`.
-    it.fails("has no node builtins", () => {
+    // CallNode.ts used Buffer until P0.4 replaced it with src/util/base64.ts.
+    it("has no node builtins", () => {
       expect(result!.findings).toEqual([]);
     });
   });
@@ -127,10 +121,8 @@ describe("browser-safe", () => {
       expect(result!.inputs.length).toBeGreaterThan(500);
     });
 
-    it("finds the known CallNode Buffer use", () => {
-      expect(result!.findings).toContain(
-        "global Buffer in src/graph/objects/vertices/nodes/CallNode.ts",
-      );
+    it("finds no node globals or builtins in core's own sources", () => {
+      expect(result!.findings.filter((f) => / in src\//.test(f))).toEqual([]);
     });
 
     // Third-party code still pulls in Buffer, process, `global` and `path` even after
