@@ -34,6 +34,9 @@ import { createRng, pick, seedFromCanvas, type Rng } from "./util/rng";
 import { type SecretResolver, toSecretResolver } from "./secrets";
 import { lintSecretInPrompt } from "./language/lints";
 import { redactingPersistor, redactRequest } from "./runtime/redact";
+import { RunController, abortableStream, raceAbort } from "./runtime/controller";
+import { warnExecutingNodes } from "./runtime/stop";
+import { recordCall, type TokenUsage } from "./runtime/usage";
 
 export interface HttpTemplate {
   id: string;
@@ -185,6 +188,8 @@ export interface RunArgs {
   runName?: string;
   /** Seeds the RNG that mock runs use for choices. Defaults to a hash of the canvas. */
   seed?: number;
+  /** Stops the run and cancels its calls. Defaults to a fresh controller. */
+  controller?: RunController;
   cannoliServer?: {
     url: string;
     secret: string;
@@ -228,6 +233,8 @@ export class Run {
 
   usage: Record<string, ModelUsage>;
 
+  controller: RunController;
+
   forEachTracker: Map<string, number> = new Map();
 
   constructor({
@@ -248,8 +255,13 @@ export class Run {
     resume,
     cannoliServer,
     seed,
+    controller,
   }: RunArgs) {
     this.onFinish = onFinish ?? ((stoppage: Stoppage) => {});
+    this.controller = controller ?? new RunController();
+    this.controller.signal.addEventListener("abort", () => this.stopped(), {
+      once: true,
+    });
     this.isMock = isMock ?? false;
     this.rng = createRng(seed ?? seedFromCanvas(cannoli));
     this.secrets = toSecretResolver(secrets);
@@ -385,6 +397,7 @@ export class Run {
         secrets: this.secrets,
         fetcher,
         replacers,
+        controller: this.controller,
       });
     };
   }
@@ -583,6 +596,15 @@ export class Run {
   }
 
   stop() {
+    this.controller.stop();
+  }
+
+  /** The controller aborted: mark what was running, then finish as stopped. */
+  private stopped() {
+    if (this.stopTime) {
+      return;
+    }
+    warnExecutingNodes(this, "Stopped by user");
     this.handleFinish("user");
   }
 
@@ -775,6 +797,11 @@ export class Run {
   }
 
   objectError(object: CannoliObject, message?: string) {
+    // After a user stop, errors are the stop's echo (aborted calls).
+    if (this.controller.signal.aborted) {
+      return;
+    }
+
     if (this.persistor && object instanceof CannoliVertex) {
       this.persistor.addError(object.id, message ?? "Unknown error");
     }
@@ -957,9 +984,18 @@ export class Run {
           return this.createMockFunctionResponse(request);
         }
 
+        const signal = this.controller.signal;
         // Catch any errors
         try {
-          const response = await this.llm.getCompletion(request);
+          if (signal.aborted) throw signal.reason;
+          let tokens: TokenUsage | undefined;
+          const response = await raceAbort(
+            this.llm.getCompletion(request, {
+              signal,
+              onUsage: (u) => (tokens = u),
+            }),
+            signal,
+          );
           const completion = response;
 
           if (verbose) {
@@ -971,25 +1007,14 @@ export class Run {
             );
           }
 
-          // const responseUsage =
-          // 	Llm.getCompletionResponseUsage(response);
-
-          if (request.model) {
-            const numberOfCalls = this.usage[request.model]?.numberOfCalls ?? 0;
-            // const promptTokens = this.usage[request.model]?.promptTokens ?? 0;
-            // const completionTokens = this.usage[request.model]?.completionTokens ?? 0;
-
-            this.usage[request.model] = {
-              numberOfCalls: numberOfCalls + 1,
-              // promptTokens: promptTokens + responseUsage.prompt_tokens,
-              // completionTokens: completionTokens + responseUsage.completion_tokens,
-            };
-          }
+          recordCall(this.usage, request.model, tokens);
 
           invariant(completion, "No message returned");
 
           return completion;
         } catch (e) {
+          // A user stop rejects instead, so the node ends quietly.
+          if (signal.aborted) throw signal.reason;
           return e as Error;
         }
       },
@@ -1018,12 +1043,17 @@ export class Run {
           return this.createMockFunctionResponse(request);
         }
 
+        const signal = this.controller.signal;
         // Catch any errors
         try {
-          const response = await this.llm.getGoalCompletion({
-            ...request,
-            onReasoningMessagesUpdated,
-          });
+          if (signal.aborted) throw signal.reason;
+          const response = await raceAbort(
+            this.llm.getGoalCompletion(
+              { ...request, onReasoningMessagesUpdated },
+              { signal },
+            ),
+            signal,
+          );
           const completion = response;
 
           if (verbose) {
@@ -1035,25 +1065,15 @@ export class Run {
             );
           }
 
-          // const responseUsage =
-          // 	Llm.getCompletionResponseUsage(response);
-
-          if (request.model) {
-            const numberOfCalls = this.usage[request.model]?.numberOfCalls ?? 0;
-            // const promptTokens = this.usage[request.model]?.promptTokens ?? 0;
-            // const completionTokens = this.usage[request.model]?.completionTokens ?? 0;
-
-            this.usage[request.model] = {
-              numberOfCalls: numberOfCalls + 1,
-              // promptTokens: promptTokens + responseUsage.prompt_tokens,
-              // completionTokens: completionTokens + responseUsage.completion_tokens,
-            };
-          }
+          // An agent makes several model calls; their tokens aren't summed yet.
+          recordCall(this.usage, request.model);
 
           invariant(completion, "No message returned");
 
           return completion;
         } catch (e) {
+          // A user stop rejects instead, so the node ends quietly.
+          if (signal.aborted) throw signal.reason;
           return e as Error;
         }
       },
@@ -1067,18 +1087,42 @@ export class Run {
       return "Mock response";
     }
     const llm = this.llm;
+    const signal = this.controller.signal;
 
     // A streaming call holds its limiter slot until the stream ends, not just
-    // until the stream object is returned (DESIGN §11.5).
-    const release = await this.acquireLlmSlot();
+    // until the stream object is returned (DESIGN §11.5). A stop frees it at
+    // once: the provider's stream may not notice the abort until its next chunk.
+    const acquired = await this.acquireLlmSlot();
+    let tokens: TokenUsage | undefined;
+    let started = false;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      signal.removeEventListener("abort", finish);
+      acquired();
+      // Like callLLM, count calls that got a response, even a partial one.
+      if (started) recordCall(this.usage, request.model, tokens);
+    };
+    signal.addEventListener("abort", finish, { once: true });
     try {
-      const response = await llm.getCompletionStream(request);
+      if (signal.aborted) throw signal.reason;
+      const response = await raceAbort(
+        llm.getCompletionStream(request, {
+          signal,
+          onUsage: (u) => (tokens = u),
+        }),
+        signal,
+      );
 
       invariant(response, "No message returned");
+      started = true;
 
-      return releaseWhenDone(response, release);
+      return abortableStream(releaseWhenDone(response, finish), signal);
     } catch (e) {
-      release();
+      finish();
+      // A user stop rejects instead, so the node ends quietly.
+      if (signal.aborted) throw signal.reason;
       return e as Error;
     }
   }
@@ -1347,19 +1391,26 @@ export class Run {
     }
 
     // Prepare fetch options
+    const signal = this.controller.signal;
     const options: RequestInit = {
       method: request.method ?? "GET", // Default to GET if no body is provided
       headers: headers,
       body: body,
+      signal,
     };
 
     try {
-      const responseText = await Promise.race([
-        this.fetcher(request.url, options),
-        new Promise<Error>((_, reject) =>
-          setTimeout(() => reject(new Error("Request timed out.")), timeout),
-        ),
-      ]);
+      if (signal.aborted) throw signal.reason;
+      // The race covers fetchers that ignore the signal (Obsidian's requestUrl).
+      const responseText = await raceAbort(
+        Promise.race([
+          this.fetcher(request.url, options),
+          new Promise<Error>((_, reject) =>
+            setTimeout(() => reject(new Error("Request timed out.")), timeout),
+          ),
+        ]),
+        signal,
+      );
 
       if (responseText instanceof Error) {
         return responseText;
@@ -1388,6 +1439,8 @@ export class Run {
           .replace(/\\"/g, '"'); // Ensure double quotes are properly formatted
       }
     } catch (error) {
+      // A user stop rejects instead, so the node ends quietly.
+      if (signal.aborted) throw signal.reason;
       if (error instanceof Error) {
         return new Error(`Error on HTTP request: ${error.message}`);
       } else {

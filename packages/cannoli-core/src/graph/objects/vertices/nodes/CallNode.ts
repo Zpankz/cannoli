@@ -190,7 +190,9 @@ export class CallNode extends CannoliNode {
 
       // Fetch the image at the url if it's http
       if (url.startsWith("http")) {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+          signal: this.run.controller.signal,
+        });
         const blob = await response.blob();
         const base64 = arrayBufferToBase64(await blob.arrayBuffer());
         url = `data:image/jpeg;base64,${base64}`;
