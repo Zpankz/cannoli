@@ -21,6 +21,7 @@ import {
   valTownSendEmail,
   Replacer,
   run,
+  RunController,
   bake,
   CannoliFunctionInfo,
   parseCannoliFunctionInfo,
@@ -1300,8 +1301,10 @@ export default class Cannoli extends Plugin {
         }
       : undefined;
 
-    // Do the live run
-    const [liveStoppagePromise, stopLiveCannoli] = run({
+    // Do the live run. Stopping it aborts its in-flight calls.
+    const controller = new RunController();
+    const [liveStoppagePromise] = run({
+      controller,
       cannoli: canvasData,
       llmConfigs: llmConfigs,
       actions: actions,
@@ -1321,7 +1324,7 @@ export default class Cannoli extends Plugin {
     });
 
     // add to running cannolis
-    this.runningCannolis[file.basename] = stopLiveCannoli;
+    this.runningCannolis[file.basename] = () => controller.stop();
 
     const liveStoppage = await liveStoppagePromise;
 
