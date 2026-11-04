@@ -1093,6 +1093,10 @@ export class Run {
     request: GenericCompletionParams,
     verbose?: boolean,
   ): Promise<GenericCompletionResponse | Error> {
+    request = {
+      ...request,
+      provider: request.provider ?? this.llm?.getConfig?.()?.provider,
+    };
     request = redactRequest(request, this.redactionSecrets);
     return this.llmLimit(
       async (): Promise<GenericCompletionResponse | Error> => {
@@ -1207,6 +1211,10 @@ export class Run {
   }
 
   async callLLMStream(request: GenericCompletionParams) {
+    request = {
+      ...request,
+      provider: request.provider ?? this.llm?.getConfig?.()?.provider,
+    };
     request = redactRequest(request, this.redactionSecrets);
     const model = this.model;
     if (this.isMock || !model) {
