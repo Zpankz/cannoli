@@ -11,17 +11,6 @@
           "promptTokens": 406
         }
       }
-    },
-    {
-      "reason": "error",
-      "message": "Could not get HTTP template with name \"modal\" from floating nodes or pre-set templates.",
-      "results": {},
-      "usage": {
-        "mock-model": {
-          "numberOfCalls": 2,
-          "promptTokens": 406
-        }
-      }
     }
   ],
   "statuses": {

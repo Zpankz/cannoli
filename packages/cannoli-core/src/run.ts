@@ -763,6 +763,11 @@ export class Run {
       this.persistor.addError(object.id, message ?? "Unknown error");
     }
 
+    // The first error ends the run; later ones still mark their node.
+    if (this.stopTime) {
+      return;
+    }
+
     // Not this.error(): this runs inside the object's "update" event listener,
     // where a throw can't reach the run. Browsers only log it, but Node's
     // EventTarget re-raises it as an uncaught exception.

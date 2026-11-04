@@ -6,12 +6,6 @@
       "message": "Could not get HTTP template with name \"dalle\" from floating nodes or pre-set templates.",
       "results": {},
       "usage": {}
-    },
-    {
-      "reason": "error",
-      "message": "Could not get HTTP template with name \"[dalle]\nmake a picture of a guinea pig at a {{event}}\" from floating nodes or pre-set templates.",
-      "results": {},
-      "usage": {}
     }
   ],
   "statuses": {

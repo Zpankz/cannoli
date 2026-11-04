@@ -6,12 +6,6 @@
       "message": "Could not get HTTP template with name \"smart-connections\" from floating nodes or pre-set templates.",
       "results": {},
       "usage": {}
-    },
-    {
-      "reason": "error",
-      "message": "Could not get HTTP template with name \"[smart-connections]\nMeeting where Bob was present\" from floating nodes or pre-set templates.",
-      "results": {},
-      "usage": {}
     }
   ],
   "statuses": {
