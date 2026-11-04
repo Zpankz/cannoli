@@ -1,0 +1,125 @@
+// AI SDK provider factories (DESIGN §4.4, P1.3). Every factory gets the
+// host's fetch, so the plugin can route calls through Obsidian.
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogle } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import type { LanguageModel } from "ai";
+import type { LLMConfig } from "../../providers";
+import type { ProviderId } from "../types";
+
+export interface AiSdkProviderConfig {
+  /** What requests name the provider by: the ref prefix, or a legacy provider id. */
+  id: string;
+  kind: ProviderId;
+  apiKey?: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+}
+
+const OLLAMA_BASE_URL = "http://localhost:11434";
+const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+
+/** Ollama serves the OpenAI API under /v1; accept the base with or without it. */
+function ollamaBaseURL(baseURL = OLLAMA_BASE_URL): string {
+  return `${baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")}/v1`;
+}
+
+/** LangChain's anthropicApiUrl omits /v1; the AI SDK's baseURL includes it. */
+function anthropicBaseURL(baseURL: string): string {
+  const trimmed = baseURL.replace(/\/+$/, "");
+  return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`;
+}
+
+/** The AI SDK model for `modelId` on the configured provider. */
+export function createProviderModel(
+  config: AiSdkProviderConfig,
+  modelId: string,
+  fetch?: typeof globalThis.fetch,
+): LanguageModel {
+  const { apiKey, headers } = config;
+  const baseURL = config.baseURL || undefined;
+  switch (config.kind) {
+    case "anthropic":
+      return createAnthropic({
+        apiKey,
+        baseURL: baseURL && anthropicBaseURL(baseURL),
+        // Anthropic refuses browser-origin calls without this.
+        headers: {
+          ...headers,
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        fetch,
+      })(modelId);
+    case "openai": {
+      const openai = createOpenAI({ apiKey, baseURL, headers, fetch });
+      // Endpoints other than OpenAI's rarely serve the Responses API.
+      return baseURL ? openai.chat(modelId) : openai(modelId);
+    }
+    case "google":
+      return createGoogle({ apiKey, baseURL, headers, fetch })(modelId);
+    case "openrouter":
+      return createOpenRouter({ apiKey, baseURL, headers, fetch })(modelId);
+    case "ollama":
+      return createOpenAICompatible({
+        name: "ollama",
+        baseURL: ollamaBaseURL(baseURL),
+        apiKey,
+        headers,
+        includeUsage: true,
+        fetch,
+      })(modelId);
+    case "openai-compatible":
+      if (!baseURL) {
+        throw new Error(
+          `Provider "${config.id}" needs a base URL for an OpenAI-compatible endpoint.`,
+        );
+      }
+      return createOpenAICompatible({
+        name: config.id,
+        baseURL,
+        apiKey,
+        headers,
+        includeUsage: true,
+        fetch,
+      })(modelId);
+  }
+}
+
+/** Legacy provider names to the config id requests resolve them by. */
+export const LEGACY_PROVIDER_IDS: Record<string, string | undefined> = {
+  openai: "openai",
+  gemini: "google",
+  anthropic: "anthropic",
+  ollama: "ollama",
+  groq: "groq",
+  // No AI SDK provider here: azure_openai runs on the fallback port.
+  azure_openai: undefined,
+};
+
+/**
+ * The v3 settings' LLMConfigs as AI SDK providers. azure_openai is left out,
+ * so its calls go to the fallback (LangChain) port.
+ */
+export function providersFromLegacyConfigs(
+  llmConfigs: LLMConfig[],
+): AiSdkProviderConfig[] {
+  const providers: AiSdkProviderConfig[] = [];
+  for (const config of llmConfigs) {
+    const id = LEGACY_PROVIDER_IDS[config.provider];
+    if (!id) continue;
+    const provider: AiSdkProviderConfig =
+      config.provider === "groq"
+        ? { id, kind: "openai-compatible" }
+        : { id, kind: id as ProviderId };
+    if (config.apiKey) provider.apiKey = config.apiKey;
+    if (config.provider === "groq") provider.baseURL = GROQ_BASE_URL;
+    // Legacy gemini ignores baseURL; keep that.
+    else if (config.baseURL && config.provider !== "gemini") {
+      provider.baseURL = config.baseURL;
+    }
+    providers.push(provider);
+  }
+  return providers;
+}

@@ -26,6 +26,26 @@ export type { ModelPort, GoalAgentPort } from "./model/port";
 export { canRunGoalAgent } from "./model/port";
 export { LangchainModelPort } from "./model/langchain";
 export {
+  AiSdkModelPort,
+  type AiSdkModelPortOptions,
+} from "./model/ai-sdk/adapter";
+export {
+  createProviderModel,
+  providersFromLegacyConfigs,
+  type AiSdkProviderConfig,
+} from "./model/ai-sdk/providers";
+export {
+  DEFAULT_MODEL_ROLES,
+  MODELS,
+  apiIdFor,
+  getModelInfo,
+  resolveModelAlias,
+  type ModelInfo,
+  type ModelRole,
+  type ModelRoles,
+} from "./model/registry";
+export { MockModelPort, type MockModelPortOptions } from "./model/mock";
+export {
   fromLegacyMessages,
   fromLegacyParams,
   fromLegacyResponse,

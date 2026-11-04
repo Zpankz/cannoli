@@ -394,6 +394,8 @@ describe("redaction", () => {
       runArgs: {
         secrets: secretResolverFromRecord({ MY_SECRET: SECRET_VALUE }),
         llmConfigs: [{ provider: "openai", model: "gpt-4o", apiKey: "x" }],
+        // The spies below stand in for the LangChain provider.
+        providerEngine: "langchain",
       },
       beforeStart: (run) => {
         const llm = run.llm!;

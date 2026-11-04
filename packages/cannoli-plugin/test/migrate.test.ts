@@ -340,4 +340,24 @@ describe("migrateSettings", () => {
     expect(Array.isArray(v3.settings.secrets)).toBe(true);
     expect(Array.isArray(v3.settings.providers)).toBe(true);
   });
+
+  it("new installs get the AI SDK engine, upgraders keep LangChain", () => {
+    const store = new SecretStorage();
+    expect(migrateSettings(null, store).settings.providerEngine).toBe("ai-sdk");
+
+    const v2 = migrateSettings(v2Data(), store);
+    expect(v2.settings.providerEngine).toBe("langchain");
+    expect(v2.changed).toBe(true);
+
+    const v3 = migrateSettings({ settingsVersion: 3, secrets: [] }, store);
+    expect(v3.settings.providerEngine).toBe("langchain");
+    expect(v3.changed).toBe(true);
+
+    const chosen = migrateSettings(
+      { ...v2.settings, providerEngine: "ai-sdk" },
+      store,
+    );
+    expect(chosen.settings.providerEngine).toBe("ai-sdk");
+    expect(chosen.changed).toBe(false);
+  });
 });
