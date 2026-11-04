@@ -41,7 +41,7 @@ const LAYOUT_KEYS = new Set([
 // derived from the original id and loop index). Keep this list for future fields.
 const VOLATILE_KEYS = new Set<string>([]);
 
-function verifiedData(
+export function verifiedData(
   canvas: unknown,
   opts: CompileOptions = {},
 ): VerifiedCannoliCanvasData {

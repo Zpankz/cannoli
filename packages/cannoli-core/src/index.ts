@@ -16,3 +16,6 @@ export type {
 } from "./bake";
 export * from "./actions";
 export * from "./serverClient";
+export * from "./secrets";
+export { lintSecretInPrompt, type Lint } from "./language/lints";
+export { redactSecrets } from "./runtime/redact";

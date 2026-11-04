@@ -10,6 +10,7 @@ import {
   GroupType,
   CannoliObjectStatus,
   ContentNodeType,
+  CallNodeType,
   EdgeModifier,
   EdgeType,
 } from "src/graph";
@@ -257,9 +258,12 @@ export class CannoliNode extends CannoliVertex {
               } else {
                 content = `{{${reference.name}}}`;
               }
-            } else if (this.run.secrets && this.run.secrets[reference.name]) {
-              // Check in this.run.secrets
-              content = this.run.secrets[reference.name];
+            } else if (
+              // Secret values never go into an LLM prompt (call-family nodes)
+              !(Object.values(CallNodeType) as string[]).includes(this.type) &&
+              this.run.secrets.get(reference.name)
+            ) {
+              content = this.run.secrets.get(reference.name) as string;
             } else {
               // this.warning(`Variable "${reference.name}" not found`);
               content = `{{${reference.name}}}`;
