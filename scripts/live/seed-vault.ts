@@ -23,8 +23,9 @@ for (const d of [".obsidian", `.obsidian/plugins/${pluginId}`, "Smoke"])
 // response into the content node; a labelled arrow into a call node fills {{label}}.
 type Node = {
   id: string;
-  type: "text";
-  text: string;
+  type: "text" | "group";
+  text?: string;
+  label?: string;
   x: number;
   y: number;
   width: number;
@@ -56,13 +57,20 @@ const node = (
   height: 120,
   ...(color ? { color } : {}),
 });
-const edge = (id: string, from: string, to: string, label?: string): Edge => ({
+const edge = (
+  id: string,
+  from: string,
+  to: string,
+  label?: string,
+  color?: string,
+): Edge => ({
   id,
   fromNode: from,
   fromSide: "right",
   toNode: to,
   toSide: "left",
   ...(label ? { label } : {}),
+  ...(color ? { color } : {}),
 });
 
 const canvases: Record<string, { nodes: Node[]; edges: Edge[] }> = {
@@ -84,6 +92,42 @@ const canvases: Record<string, { nodes: Node[]; edges: Edge[] }> = {
     ],
     edges: [edge("e1", "topic", "call", "topic"), edge("e2", "call", "output")],
   },
+};
+// (P0.4) a parallel group of 8 calls: the list "1".."8" feeds a cyan ("5") group labelled 8
+// through a cyan list arrow labelled "n"; each copy of the call runs once, and the "-" arrow
+// merges the 8 replies into "output" as a list. With pLimit 2 (data.json below) at most 2 of
+// the 8 calls reach the model at once. Expectations: scripts/live/expect/parallel.json.
+canvases["Smoke/parallel.canvas"] = {
+  nodes: [
+    node(
+      "numbers",
+      Array.from({ length: 8 }, (_, i) => `- ${i + 1}`).join("\n"),
+      0,
+      0,
+      "6",
+    ),
+    {
+      id: "group",
+      type: "group",
+      label: "8",
+      x: 340,
+      y: -60,
+      width: 420,
+      height: 260,
+      color: "5",
+    },
+    node(
+      "call",
+      "Reply with only the English word for the number {{n}}.",
+      420,
+      0,
+    ),
+    node("output", "", 860, 0, "6"),
+  ],
+  edges: [
+    edge("list", "numbers", "group", "n", "5"),
+    edge("merge", "call", "output", "-"),
+  ],
 };
 // (P0.2) a node carrying the engine's `cannoli` metadata field; checks whether Obsidian keeps it on edit.
 // Expectations: scripts/live/expect/meta-preserve.json.
@@ -111,6 +155,8 @@ await Bun.write(
       ollamaModel,
       ollamaTemperature: 0.7,
       requestThreshold: 20,
+      // LLM concurrency limit; Smoke/parallel.canvas checks it is honoured.
+      pLimit: 2,
       seenVersion2Modal: true,
       seenVersion3Modal: true,
     },

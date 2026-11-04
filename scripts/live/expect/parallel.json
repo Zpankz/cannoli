@@ -1,0 +1,17 @@
+{
+	"canvas": "Smoke/parallel.canvas",
+	"description": "all 8 copies of the call in the parallel group answer, and the merged list in output has a reply under each number",
+	"run": "complete",
+	"nodes": [
+		{ "node": "call", "status": "ok" },
+		{ "node": "output", "color": "6", "status": "ok", "textMatches": "(?:^|\\n)\\s*- 1\\n\\s+\\S" },
+		{ "node": "output", "textMatches": "(?:^|\\n)\\s*- 2\\n\\s+\\S" },
+		{ "node": "output", "textMatches": "(?:^|\\n)\\s*- 3\\n\\s+\\S" },
+		{ "node": "output", "textMatches": "(?:^|\\n)\\s*- 4\\n\\s+\\S" },
+		{ "node": "output", "textMatches": "(?:^|\\n)\\s*- 5\\n\\s+\\S" },
+		{ "node": "output", "textMatches": "(?:^|\\n)\\s*- 6\\n\\s+\\S" },
+		{ "node": "output", "textMatches": "(?:^|\\n)\\s*- 7\\n\\s+\\S" },
+		{ "node": "output", "textMatches": "(?:^|\\n)\\s*- 8\\n\\s+\\S" }
+	],
+	"notices": ["^Cannoli complete: parallel"]
+}
