@@ -1,27 +1,19 @@
 import { Setting } from "obsidian";
 import Cannoli from "src/main";
+import { addSecretSetting } from "src/settings/sections/secretSetting";
 import { DEFAULT_SETTINGS } from "src/settings/settings";
 
 export function createGroqSettings(
   containerEl: HTMLElement,
   plugin: Cannoli,
 ): void {
-  // groq api key setting
-  new Setting(containerEl)
-    .setName("Groq API key")
-    .setDesc(
-      "This key will be used to make all Groq LLM calls. Be aware that complex cannolis, can be expensive to run.",
-    )
-    .addText((text) =>
-      text
-        .setValue(plugin.settings.groqAPIKey)
-        .setPlaceholder("sk-...")
-        .onChange(async (value) => {
-          plugin.settings.groqAPIKey = value;
-          await plugin.saveSettings();
-        })
-        .inputEl.setAttribute("type", "password"),
-    );
+  addSecretSetting(
+    containerEl,
+    plugin,
+    "groqAPIKey",
+    "Groq API key",
+    "This key will be used to make all Groq LLM calls. Be aware that complex cannolis, can be expensive to run.",
+  );
   // groq model setting
   new Setting(containerEl)
     .setName("Groq model")

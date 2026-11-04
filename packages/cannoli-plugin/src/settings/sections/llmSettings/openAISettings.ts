@@ -1,26 +1,19 @@
 import { Setting } from "obsidian";
 import Cannoli from "src/main";
+import { addSecretSetting } from "src/settings/sections/secretSetting";
 import { DEFAULT_SETTINGS } from "src/settings/settings";
 
 export function createOpenAISettings(
   containerEl: HTMLElement,
   plugin: Cannoli,
 ): void {
-  new Setting(containerEl)
-    .setName("OpenAI API key")
-    .setDesc(
-      "This key will be used to make all openai LLM calls. Be aware that complex cannolis, especially those with many GPT-4 calls, can be expensive to run.",
-    )
-    .addText((text) =>
-      text
-        .setValue(plugin.settings.openaiAPIKey)
-        .setPlaceholder("sk-...")
-        .onChange(async (value) => {
-          plugin.settings.openaiAPIKey = value;
-          await plugin.saveSettings();
-        })
-        .inputEl.setAttribute("type", "password"),
-    );
+  addSecretSetting(
+    containerEl,
+    plugin,
+    "openaiAPIKey",
+    "OpenAI API key",
+    "This key will be used to make all openai LLM calls. Be aware that complex cannolis, especially those with many GPT-4 calls, can be expensive to run.",
+  );
 
   // Request threshold setting. This is the number of AI requests at which the user will be alerted before running a Cannoli
   new Setting(containerEl)

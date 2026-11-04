@@ -1,5 +1,6 @@
 import { Setting } from "obsidian";
 import Cannoli from "src/main";
+import { addSecretSetting } from "src/settings/sections/secretSetting";
 import { DEFAULT_SETTINGS } from "src/settings/settings";
 
 export function createAnthropicSettings(
@@ -21,22 +22,13 @@ export function createAnthropicSettings(
           await plugin.saveSettings();
         }),
     );
-  // anthropic api key setting
-  new Setting(containerEl)
-    .setName("Anthropic API key")
-    .setDesc(
-      "This key will be used to make all Anthropic LLM calls. Be aware that complex cannolis, can be expensive to run.",
-    )
-    .addText((text) =>
-      text
-        .setValue(plugin.settings.anthropicAPIKey)
-        .setPlaceholder("sk-...")
-        .onChange(async (value) => {
-          plugin.settings.anthropicAPIKey = value;
-          await plugin.saveSettings();
-        })
-        .inputEl.setAttribute("type", "password"),
-    );
+  addSecretSetting(
+    containerEl,
+    plugin,
+    "anthropicAPIKey",
+    "Anthropic API key",
+    "This key will be used to make all Anthropic LLM calls. Be aware that complex cannolis, can be expensive to run.",
+  );
   // anthropic model setting
   new Setting(containerEl)
     .setName("Anthropic model")

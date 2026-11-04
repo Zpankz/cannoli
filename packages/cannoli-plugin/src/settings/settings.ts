@@ -5,7 +5,59 @@ import {
   SupportedProviders,
 } from "@deablabs/cannoli-core";
 
+/** Provider kinds in settings v3. */
+export type ProviderId =
+  | "anthropic"
+  | "openai"
+  | "google"
+  | "openrouter"
+  | "ollama"
+  | "openai-compatible";
+
+/**
+ * `<provider profile id>:<model>`, e.g. `openai:gpt-4o` or `groq:llama3-70b-8192`.
+ * The prefix is a profile id, which for openai-compatible profiles is not a ProviderId.
+ */
+export type ModelRef = `${string}:${string}`;
+
+export interface ProviderProfile {
+  id: ProviderId | string;
+  kind: ProviderId;
+  baseURL?: string;
+  enabled: boolean;
+  /** SecretStorage id of the API key. */
+  secretId?: string;
+}
+
+export interface ModelRoles {
+  call: ModelRef;
+  agent: ModelRef;
+  router: ModelRef;
+  orchestrator?: ModelRef;
+  local?: ModelRef;
+}
+
+export interface UserSecret {
+  name: string;
+  /** Legacy plaintext value; blank once moved to SecretStorage. */
+  value: string;
+  visibility: string;
+  /** SecretStorage id holding the value. */
+  secretId?: string;
+}
+
 export interface CannoliSettings {
+  // Settings v3 (additive: the v2 fields below are still read by the runtime).
+  settingsVersion?: 3;
+  providers: ProviderProfile[];
+  models: ModelRoles;
+  concurrency: { pLimit: number; requestThreshold: number };
+  network: { allow: string[]; allowLocalhost: boolean };
+  /** SecretStorage ids for the non-provider keys. */
+  valTownSecretId: string;
+  exaSecretId: string;
+  cannoliServerSecretId: string;
+
   llmProvider: SupportedProviders;
   ollamaBaseUrl: string;
   ollamaModel: string;
@@ -51,7 +103,7 @@ export interface CannoliSettings {
   bakeIndent: "2" | "4";
   seenVersion2Modal: boolean;
   enableVision: boolean;
-  secrets: { name: string; value: string; visibility: string }[];
+  secrets: UserSecret[];
   onlyRunCannoliGroups: boolean;
   cannoliServerEnabled: boolean;
   cannoliServerUrl: string;
@@ -60,6 +112,57 @@ export interface CannoliSettings {
 }
 
 export const DEFAULT_SETTINGS: CannoliSettings = {
+  settingsVersion: 3,
+  providers: [
+    {
+      id: "openai",
+      kind: "openai",
+      enabled: true,
+      secretId: "cannoli-key-openai",
+    },
+    {
+      id: "anthropic",
+      kind: "anthropic",
+      enabled: false,
+      secretId: "cannoli-key-anthropic",
+    },
+    {
+      id: "google",
+      kind: "google",
+      enabled: false,
+      secretId: "cannoli-key-google",
+    },
+    {
+      id: "ollama",
+      kind: "ollama",
+      baseURL: "http://127.0.0.1:11434",
+      enabled: false,
+    },
+    {
+      id: "groq",
+      kind: "openai-compatible",
+      baseURL: "https://api.groq.com/openai/v1",
+      enabled: false,
+      secretId: "cannoli-key-groq",
+    },
+    {
+      id: "azure",
+      kind: "openai-compatible",
+      enabled: false,
+      secretId: "cannoli-key-azure",
+    },
+  ],
+  models: {
+    call: "openai:gpt-4o",
+    agent: "openai:gpt-4o",
+    router: "openai:gpt-4o",
+    local: "ollama:llama2",
+  },
+  concurrency: { pLimit: 50, requestThreshold: 20 },
+  network: { allow: [], allowLocalhost: true },
+  valTownSecretId: "cannoli-secret-valtown-api-key",
+  exaSecretId: "cannoli-secret-exa-api-key",
+  cannoliServerSecretId: "cannoli-secret-cannoli-server",
   llmProvider: "openai",
   ollamaBaseUrl: "http://127.0.0.1:11434",
   ollamaModel: "llama2",

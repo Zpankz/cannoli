@@ -1,5 +1,6 @@
-import { Notice, Setting } from "obsidian";
+import { Notice, SecretComponent, Setting } from "obsidian";
 import Cannoli from "src/main";
+import { selectUserSecret } from "src/secrets/migrate";
 
 export function createSecretsSettings(
   containerEl: HTMLElement,
@@ -11,7 +12,7 @@ export function createSecretsSettings(
   new Setting(containerEl)
     .setName("Secrets")
     .setDesc(
-      `These secrets will be available in all of your cannolis, using "{{secret name}}". They are not stored in the canvas, and wil not be included when you bake a cannoli.`,
+      `These secrets will be available in all of your cannolis, using "{{secret name}}". Each one points at a secret in Obsidian's secret storage; the value is not stored in the canvas or in the plugin's settings, and will not be included when you bake a cannoli.`,
     )
     .addButton((button) =>
       button.setButtonText("+ Secret").onClick(async () => {
@@ -40,30 +41,22 @@ export function createSecretsSettings(
             await plugin.saveSettings();
           }),
       )
-      .addText((text) =>
-        text
-          .setValue(secret.value)
-          .setPlaceholder("Secret Value")
-          .onChange(async (value) => {
-            secret.value = value;
+      .addComponent((el) =>
+        new SecretComponent(plugin.app, el)
+          .setValue(secret.secretId ?? "")
+          .onChange(async (id) => {
+            selectUserSecret(secret, id ?? "");
             await plugin.saveSettings();
-          })
-          .inputEl.setAttribute("type", secret.visibility || "password"),
-      )
-      .addButton((button) =>
-        button.setButtonText("👁️").onClick(async () => {
-          secret.visibility =
-            secret.visibility === "password" ? "text" : "password";
-          await plugin.saveSettings();
-          display();
-        }),
+          }),
       )
       .addButton((button) =>
         button
           .setButtonText("📋")
           .setTooltip("Copy to clipboard")
           .onClick(async () => {
-            await navigator.clipboard.writeText(secret.value);
+            await navigator.clipboard.writeText(
+              secret.value || plugin.secretStore.getKey(secret.secretId),
+            );
             new Notice("Secret value copied to clipboard");
           }),
       )
