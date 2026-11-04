@@ -266,6 +266,7 @@ export class Run {
   /** Stable FNV-1a canvas fingerprint, not a cryptographic integrity check. */
   private readonly canvasHash: string;
   private began = false;
+  private settlingCalls = 0;
   private completionPending = false;
   private readonly eventUsage: Usage = { inputTokens: 0, outputTokens: 0 };
   private readonly callAbort = new AbortController();
@@ -742,6 +743,11 @@ export class Run {
     for (const settle of [...this.openStreams]) settle();
 
     const finish = (failure?: unknown) => {
+      // A final text observer may stop the run from inside call settlement.
+      if (this.settlingCalls > 0) {
+        queueMicrotask(() => finish(failure));
+        return;
+      }
       if (failure) {
         reason = "error";
         message = "Could not persist the final canvas state.";
@@ -1417,29 +1423,34 @@ export class Run {
     const finish = (usage?: Usage, firstTokenMs?: number) => {
       if (done) return;
       done = true;
-      this.openStreams.delete(finish);
-      const tail = redact("", true);
-      if (tail && this.stopTime === null)
-        this.events.emit({ t: "text-delta", id, callId, text: tail });
-      const tokens = usage ?? { inputTokens: 0, outputTokens: 0 };
-      this.eventUsage.inputTokens += tokens.inputTokens;
-      this.eventUsage.outputTokens += tokens.outputTokens;
-      for (const key of [
-        "cachedInputTokens",
-        "cacheWriteTokens",
-        "reasoningTokens",
-      ] as const) {
-        if (tokens[key] !== undefined)
-          this.eventUsage[key] = (this.eventUsage[key] ?? 0) + tokens[key];
+      this.settlingCalls++;
+      try {
+        this.openStreams.delete(finish);
+        const tokens = usage ?? { inputTokens: 0, outputTokens: 0 };
+        this.eventUsage.inputTokens += tokens.inputTokens;
+        this.eventUsage.outputTokens += tokens.outputTokens;
+        for (const key of [
+          "cachedInputTokens",
+          "cacheWriteTokens",
+          "reasoningTokens",
+        ] as const) {
+          if (tokens[key] !== undefined)
+            this.eventUsage[key] = (this.eventUsage[key] ?? 0) + tokens[key];
+        }
+        const tail = redact("", true);
+        if (tail && this.stopTime === null)
+          this.events.emit({ t: "text-delta", id, callId, text: tail });
+        this.events.emit({
+          t: "model-finish",
+          id,
+          callId,
+          usage: tokens,
+          ttftMs: firstTokenMs ?? ttftMs,
+          ms: Date.now() - at,
+        });
+      } finally {
+        this.settlingCalls--;
       }
-      this.events.emit({
-        t: "model-finish",
-        id,
-        callId,
-        usage: tokens,
-        ttftMs: firstTokenMs ?? ttftMs,
-        ms: Date.now() - at,
-      });
     };
     this.openStreams.add(finish);
     this.events.emit(

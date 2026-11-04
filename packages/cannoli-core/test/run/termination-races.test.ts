@@ -119,6 +119,64 @@ describe("terminal races", () => {
     });
   });
 
+  it.each(["stop", "error"] as const)(
+    "settles buffered tail and accepted usage before terminal %s",
+    async (kind) => {
+      const events = new RunEventBus();
+      const run = new Run({
+        cannoli: structuredClone(canvas),
+        events,
+        secrets: { KEY: "abcabc" },
+      });
+      const usage = { inputTokens: 7, outputTokens: 4 };
+      run.model = {
+        async generate() {
+          return result;
+        },
+        async *stream() {
+          yield { type: "text-delta", text: "abc" };
+          yield { type: "usage", usage };
+        },
+      };
+      const early: RunEvent[] = [],
+        late: RunEvent[] = [];
+      events.subscribe((e) => {
+        early.push(e);
+        if (e.t === "text-delta") {
+          if (kind === "stop") run.stop();
+          else
+            run.nodeExecutionFailed(run.graph.c, new Error("parallel failure"));
+        }
+      });
+      events.subscribe((e) => late.push(e));
+      const stream = await run.callLLMStream(request);
+      if (typeof stream === "string" || stream instanceof Error)
+        throw new Error("expected stream");
+      try {
+        for await (const part of stream) void part;
+      } catch {
+        /* cancellation */
+      }
+      await tick();
+      expect(early).toEqual(late);
+      expect(late.map((e) => e.t)).toEqual([
+        "run-start",
+        "model-request",
+        "text-delta",
+        "model-finish",
+        "run-finish",
+      ]);
+      expect(late.at(-1)).toMatchObject({
+        usage,
+        status: kind === "stop" ? "stopped" : "error",
+      });
+      expect(run.usage.fake).toMatchObject({
+        promptTokens: 7,
+        completionTokens: 4,
+      });
+    },
+  );
+
   it("does not mutate graph output after terminal failure", async () => {
     const { run, seen } = setup();
     run.model = {
