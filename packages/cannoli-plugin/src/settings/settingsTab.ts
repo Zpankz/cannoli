@@ -9,7 +9,6 @@ import { createSecretsSettings } from "./sections/secretsSettings";
 import { createBakingSettings } from "./sections/bakingSettings";
 import { createValTownSettings } from "./sections/valtownSettings";
 import { createActionSettings } from "./sections/actionSettings";
-import { createTracingSettings } from "src/settings/sections/tracingSettings";
 import { createServerSettings } from "src/settings/sections/serverSettings";
 
 export class CannoliSettingTab extends PluginSettingTab {
@@ -45,8 +44,6 @@ export class CannoliSettingTab extends PluginSettingTab {
       );
 
     createLLMSettings(containerEl, this.plugin, this.display);
-
-    createTracingSettings(containerEl, this.plugin, this.display);
 
     createCanvasSettings(containerEl, this.plugin);
 

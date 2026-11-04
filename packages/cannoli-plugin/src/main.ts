@@ -257,8 +257,6 @@ export default class Cannoli extends Plugin {
       "Added MCP server integration for external tool connections.",
     );
     paragraph.appendChild(createEl("br"));
-    paragraph.appendText("Added Arize AI Phoenix telemetry.");
-    paragraph.appendChild(createEl("br"));
     paragraph.appendChild(createEl("br"));
     paragraph.appendText(
       "More documentation and information on these features is forthcoming. ",
@@ -428,8 +426,7 @@ export default class Cannoli extends Plugin {
     // Get the content of the file
     const content = JSON.parse(await this.app.vault.read(file));
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tracingConfig, ...config } = this.getConfig(true);
+    const config = this.getConfig(true);
 
     const bakeResult = await bake({
       language: "typescript",
@@ -604,8 +601,7 @@ export default class Cannoli extends Plugin {
 
     // Get the content of the file
     const content = JSON.parse(await this.app.vault.read(activeFile));
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tracingConfig, ...config } = this.getConfig(true);
+    const config = this.getConfig(true);
 
     const bakeResult = await bake({
       language: this.settings.bakeLanguage,
@@ -1059,7 +1055,6 @@ export default class Cannoli extends Plugin {
       ...(this.settings.enableVision !== undefined
         ? { enableVision: this.settings.enableVision }
         : {}),
-      tracingConfig: forBake ? undefined : this.settings.tracingConfig,
     };
   };
 
