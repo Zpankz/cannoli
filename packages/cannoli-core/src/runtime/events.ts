@@ -63,7 +63,9 @@ export class RunEventBus {
       for (const queued of this.pending) {
         for (const listener of [...this.listeners]) {
           try {
-            listener(structuredClone(queued));
+            void Promise.resolve(listener(structuredClone(queued))).catch(
+              () => {},
+            );
           } catch {
             /* Observers do not control execution. */
           }

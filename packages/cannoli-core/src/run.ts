@@ -543,6 +543,7 @@ export class Run {
 
     // Validate the graph
     this.validate();
+    if (this.stopTime !== null || this.callSignal.aborted) return;
 
     // Never send a secret value to an LLM: fail before any call executes.
     const secretLint = this.canvasData
@@ -888,8 +889,13 @@ export class Run {
   /** The SDK path needs the same provider/model/generation defaults as the legacy port. */
   private modelRequest(
     request: GenericCompletionParams,
+    resolveLegacyDefaults = false,
   ): GenericCompletionParams {
-    if (this.modelOverride || this.providerEngine !== "ai-sdk") return request;
+    if (
+      !resolveLegacyDefaults &&
+      (this.modelOverride || this.providerEngine !== "ai-sdk")
+    )
+      return request;
     return {
       ...request,
       ...this.llm?.getMergedConfig?.({
@@ -1291,7 +1297,10 @@ export class Run {
         let call: ReturnType<Run["observeCall"]> | undefined;
         try {
           if (signal.aborted) throw signal.reason;
-          const input = fromLegacyParams(request, signal);
+          const input = fromLegacyParams(
+            this.modelRequest(request, true),
+            signal,
+          );
           call = this.observeCall(input, nodeId);
           if (signal.aborted) throw signal.reason;
           const model = this.model;

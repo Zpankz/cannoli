@@ -177,6 +177,77 @@ describe("terminal races", () => {
     },
   );
 
+  it("does not publish output when its executing observer stops the run", async () => {
+    const { run, events, seen } = setup();
+    run.model = {
+      async generate() {
+        return result;
+      },
+      async *stream() {},
+    };
+    events.subscribe((e) => {
+      if (e.t === "node-status" && e.id === "o" && e.status === "executing")
+        run.stop();
+    });
+    await run.start();
+    await tick();
+    expect(run.graph.o.text).toBe("");
+    expect(run.graph.o.status).not.toBe("complete");
+    expect(seen.at(-1)?.t).toBe("run-finish");
+  });
+
+  it("does not emit secret lints after validation has terminated the run", async () => {
+    const events = new RunEventBus();
+    const seen: RunEvent[] = [];
+    events.subscribe((e) => seen.push(e));
+    const data = structuredClone(canvas);
+    data.nodes[0].text = "Use {{KEY}}";
+    const run = new Run({
+      cannoli: data,
+      events,
+      secrets: { KEY: "secret-value" },
+    });
+    run.validate = () => {
+      run.nodeExecutionFailed(run.graph.c, new Error("invalid graph"));
+    };
+    await run.start();
+    await tick();
+    expect(seen.at(-1)?.t).toBe("run-finish");
+    expect(seen.some((e) => e.t === "lint")).toBe(false);
+  });
+
+  it("attributes a partial goal request to the configured model", async () => {
+    const { run, seen } = setup();
+    const model = {
+      async generate() {
+        return result;
+      },
+      async goal() {
+        return result;
+      },
+      async *stream() {},
+    };
+    run.model = model;
+    await run.callGoalAgent({ request: { messages: request.messages } });
+    expect(seen.find((e) => e.t === "model-request")).toMatchObject({
+      model: "ollama:fake",
+    });
+    run.stop();
+  });
+
+  it("isolates asynchronous observer rejections without delaying other observers", async () => {
+    const { events } = setup();
+    events.subscribe(async () => {
+      await Promise.resolve();
+      throw new Error("observer rejected");
+    });
+    const seen: RunEvent[] = [];
+    events.subscribe((e) => seen.push(e));
+    events.emit({ t: "text-delta", id: "c", callId: "x", text: "hello" });
+    expect(seen).toHaveLength(1);
+    await tick();
+  });
+
   it("does not mutate graph output after terminal failure", async () => {
     const { run, seen } = setup();
     run.model = {

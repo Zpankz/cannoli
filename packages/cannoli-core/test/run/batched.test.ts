@@ -86,6 +86,17 @@ describe("BatchedPersistor", () => {
     await batch.flush();
   });
 
+  it("preserves different diagnostics for the same node while coalescing duplicates", async () => {
+    const { batch, writes } = sink();
+    await batch.addWarning("n", "first missing note");
+    await batch.addWarning("n", "second missing note");
+    await batch.addWarning("n", "first missing note");
+    await batch.addError("n", "first error");
+    await batch.addError("n", "second error");
+    await batch.flush();
+    expect(writes.flatMap((w) => w.edits)).toHaveLength(4);
+  });
+
   it("status changes coalesce and flush next tick", async () => {
     vi.useFakeTimers();
     const { writes, batch } = sink();

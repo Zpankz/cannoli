@@ -47,10 +47,18 @@ export class BatchedPersistor implements Persistor {
     return this.object({ type: "edge", edge });
   }
   addError(id: string, message: string): Promise<void> {
-    return this.put(`error:${id}`, { type: "error", id, message }, true);
+    return this.put(
+      `error:${JSON.stringify([id, message])}`,
+      { type: "error", id, message },
+      true,
+    );
   }
   addWarning(id: string, message: string): Promise<void> {
-    return this.put(`warning:${id}`, { type: "warning", id, message }, true);
+    return this.put(
+      `warning:${JSON.stringify([id, message])}`,
+      { type: "warning", id, message },
+      true,
+    );
   }
   editOriginalParallelGroupLabel(id: string, label: string): Promise<void> {
     return this.put(`label:${id}`, { type: "label", id, label }, false);
