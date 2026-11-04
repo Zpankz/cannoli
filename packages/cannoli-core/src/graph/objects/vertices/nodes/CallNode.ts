@@ -11,6 +11,7 @@ import {
 import { ChatRole } from "src/run";
 import invariant from "tiny-invariant";
 import { CannoliNode } from "../CannoliNode";
+import { arrayBufferToBase64 } from "src/util/base64";
 import { z } from "zod";
 
 export class CallNode extends CannoliNode {
@@ -191,7 +192,7 @@ export class CallNode extends CannoliNode {
       if (url.startsWith("http")) {
         const response = await fetch(url);
         const blob = await response.blob();
-        const base64 = Buffer.from(await blob.arrayBuffer()).toString("base64");
+        const base64 = arrayBufferToBase64(await blob.arrayBuffer());
         url = `data:image/jpeg;base64,${base64}`;
       }
 
@@ -235,7 +236,7 @@ export class CallNode extends CannoliNode {
         }
 
         // turn file into base64
-        let base64 = Buffer.from(file).toString("base64");
+        let base64 = arrayBufferToBase64(file);
         base64 = `data:image/${fileName.split(".").pop()};base64,${base64}`;
 
         imageReferences.push({
