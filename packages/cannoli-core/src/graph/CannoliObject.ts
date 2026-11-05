@@ -13,7 +13,37 @@ import {
   VerifiedCannoliCanvasGroupData,
 } from "../graph";
 
+/** Immutable input for one repeated stream activation; never read back from an edge. */
+export type ExecutionPayload = Readonly<{ content: string; append: boolean }>;
+
 export class CannoliObject extends EventTarget {
+  private executionPayloads: ExecutionPayload[] = [];
+  private queuedCharacters = 0;
+
+  /** Capture before scheduling. Distinct chunks must never be coalesced. */
+  queueExecution(payload: ExecutionPayload): void {
+    if (this.run.stopTime !== null || this.run.controller.signal.aborted)
+      return;
+    if (
+      this.executionPayloads.length >= 1024 ||
+      this.queuedCharacters + payload.content.length > 1024 * 1024
+    ) {
+      this.run.nodeExecutionFailed(
+        this,
+        new Error("Execution payload buffer limit exceeded"),
+      );
+      return;
+    }
+    this.executionPayloads.push(Object.freeze({ ...payload }));
+    this.queuedCharacters += payload.content.length;
+    this.startExecution();
+  }
+
+  clearExecutionPayloads(): void {
+    this.executionPayloads = [];
+    this.queuedCharacters = 0;
+  }
+
   // @ts-ignore this is bad, but I don't want to refactor this right now
   run: Run;
   id: string;
@@ -60,7 +90,11 @@ export class CannoliObject extends EventTarget {
         // @ts-ignore
         (event: CustomEvent) => {
           // Assuming that 'obj' and 'status' are properties in the detail of the CustomEvent
-          this.dependencyUpdated(event.detail.obj, event.detail.status);
+          this.dependencyUpdated(
+            event.detail.obj,
+            event.detail.status,
+            event.detail.payload,
+          );
         },
       );
     }
@@ -128,10 +162,14 @@ export class CannoliObject extends EventTarget {
     return dependencies;
   }
 
-  dependencyUpdated(dependency: CannoliObject, status: CannoliObjectStatus) {
+  dependencyUpdated(
+    dependency: CannoliObject,
+    status: CannoliObjectStatus,
+    payload?: ExecutionPayload,
+  ) {
     switch (status) {
       case CannoliObjectStatus.Complete:
-        this.dependencyCompleted(dependency);
+        this.dependencyCompleted(dependency, payload);
         break;
       case CannoliObjectStatus.Rejected:
         this.dependencyRejected(dependency);
@@ -256,10 +294,10 @@ export class CannoliObject extends EventTarget {
     this.dispatchEvent(event);
   }
 
-  completed() {
+  completed(payload?: ExecutionPayload) {
     this.setStatus(CannoliObjectStatus.Complete);
     const event = new CustomEvent("update", {
-      detail: { obj: this, status: CannoliObjectStatus.Complete },
+      detail: { obj: this, status: CannoliObjectStatus.Complete, payload },
     });
     this.dispatchEvent(event);
   }
@@ -341,11 +379,11 @@ export class CannoliObject extends EventTarget {
     this.tryReject();
   }
 
-  dependencyCompleted(dependency: CannoliObject) {}
+  dependencyCompleted(dependency: CannoliObject, payload?: ExecutionPayload) {}
 
   dependencyExecuting(dependency: CannoliObject) {}
 
-  async execute() {}
+  async execute(payload?: ExecutionPayload) {}
 
   /**
    * Start execute() without waiting for it. If it throws, the run ends with
@@ -354,7 +392,9 @@ export class CannoliObject extends EventTarget {
   startExecution(): void {
     if (this.run.stopTime !== null || this.run.controller.signal.aborted)
       return;
-    this.execute().catch((error: unknown) => {
+    const payload = this.executionPayloads.shift();
+    if (payload) this.queuedCharacters -= payload.content.length;
+    this.execute(payload).catch((error: unknown) => {
       this.run.nodeExecutionFailed(this, error);
     });
   }

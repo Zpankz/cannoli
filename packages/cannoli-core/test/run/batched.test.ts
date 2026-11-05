@@ -178,3 +178,47 @@ describe("BatchedPersistor", () => {
     expect(writes[0].edits).toMatchObject([{ node: { text: "saved" } }]);
   });
 });
+
+it("joins edits enqueued reentrantly by the target flush", async () => {
+  const { batch, target, writes } = sink();
+  let flushes = 0;
+  target.flush = async () => {
+    if (++flushes === 1)
+      await batch.editNode(node("during flush", Status.Pending));
+  };
+  await batch.editNode(node("before", Status.Pending));
+  await batch.flush();
+  expect(writes.at(-1)?.edits).toMatchObject([
+    { node: { text: "during flush" } },
+  ]);
+  expect(flushes).toBe(2);
+});
+
+it("does not acknowledge a flush while its target is still writing", async () => {
+  const { batch, target } = sink();
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  target.flush = () => barrier;
+  let finished = false;
+  const flush = batch.flush().then(() => {
+    finished = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(finished).toBe(false);
+  release();
+  await flush;
+  expect(finished).toBe(true);
+});
+
+it("concurrent barriers share a flush and converge", async () => {
+  const { batch, target } = sink();
+  let flushes = 0;
+  target.flush = async () => {
+    flushes++;
+  };
+  await batch.editNode(node("queued", Status.Pending));
+  await Promise.all([batch.flush(), batch.flush(), batch.flush()]);
+  expect(flushes).toBe(1);
+});

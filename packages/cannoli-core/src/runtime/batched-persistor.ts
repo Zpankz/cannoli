@@ -20,6 +20,7 @@ export class BatchedPersistor implements Persistor {
   private readonly writtenAt = new Map<string, number>();
   private queue: Promise<void> = Promise.resolve();
   private failure?: unknown;
+  private flushing?: Promise<void>;
   private started = false;
   private startup: Promise<void> = Promise.resolve();
 
@@ -208,26 +209,45 @@ export class BatchedPersistor implements Persistor {
     }
   }
 
-  async flush(): Promise<void> {
+  flush(): Promise<void> {
+    return (this.flushing ??= this.flushAll().finally(() => {
+      this.flushing = undefined;
+    }));
+  }
+
+  private async flushAll(): Promise<void> {
     await this.startup;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = undefined;
-    this.deadline = Infinity;
-    await this.drain(true);
-    while (this.pending.size) {
-      const until = Math.min(
-        ...[...this.pending.keys()].map(
-          (key) => this.paints.get(key)?.until ?? Date.now(),
-        ),
-      );
-      if (Number.isFinite(until) && until > Date.now()) {
-        await new Promise((resolve) => setTimeout(resolve, until - Date.now()));
-      }
+    let unsettled: boolean;
+    do {
       if (this.timer) clearTimeout(this.timer);
       this.timer = undefined;
       this.deadline = Infinity;
       await this.drain(true);
-    }
-    await this.target.flush?.();
+      while (this.pending.size) {
+        const until = Math.min(
+          ...[...this.pending.keys()].map(
+            (key) => this.paints.get(key)?.until ?? Date.now(),
+          ),
+        );
+        if (Number.isFinite(until) && until > Date.now()) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, until - Date.now()),
+          );
+        }
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = undefined;
+        this.deadline = Infinity;
+        await this.drain(true);
+      }
+      const drained = this.queue;
+      await this.target.flush?.();
+      // Target callbacks may enqueue more edits or a timer drain during flush.
+      // Join that work before declaring this barrier complete.
+      await this.queue;
+      unsettled = this.pending.size > 0 || drained !== this.queue;
+    } while (unsettled);
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+    this.deadline = Infinity;
   }
 }
