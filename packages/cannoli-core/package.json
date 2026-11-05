@@ -60,7 +60,7 @@
     "hono": "4.7.6",
     "js-yaml": "^4.1.0",
     "langchain": "0.3.21",
-    "nanoid": "5.0.7",
+    "nanoid": "5.1.16",
     "openai": "^4.52.0",
     "p-limit": "^4.0.0",
     "prebuilt": "link:@langchain/langgraph/prebuilt",
