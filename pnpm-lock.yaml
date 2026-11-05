@@ -120,6 +120,9 @@ importers:
       zod:
         specifier: 3.25.76
         version: 3.25.76
+      zod-v4:
+        specifier: npm:zod@4.6.7
+        version: zod@4.6.7
     devDependencies:
       '@types/js-yaml':
         specifier: ^4.0.6
@@ -4029,6 +4032,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
 
   '@ai-sdk/anthropic@4.0.85(zod@3.25.76)':
@@ -4988,7 +4994,7 @@ snapshots:
 
   '@scalar/openapi-types@0.2.0':
     dependencies:
-      zod: 3.23.8
+      zod: 3.25.76
 
   '@scalar/types@0.1.6':
     dependencies:
@@ -4996,7 +5002,7 @@ snapshots:
       '@unhead/schema': 1.11.20
       nanoid: 5.1.16
       type-fest: 4.39.1
-      zod: 3.23.8
+      zod: 3.25.76
 
   '@standard-schema/spec@1.1.0': {}
 
@@ -7369,3 +7375,5 @@ snapshots:
   zod@3.23.8: {}
 
   zod@3.25.76: {}
+
+  zod@4.6.7: {}

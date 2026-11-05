@@ -18,12 +18,16 @@ import {
   GenericCompletionParams,
   GenericCompletionResponse,
 } from "src/providers";
-import { ZodSchema, z } from "zod";
+import { type ZodSchema, z } from "zod-v4";
+import type { ZodSchema as LegacyZodSchema } from "zod";
 import { CannoliEdge } from "../CannoliEdge";
 import { CannoliVertex } from "../CannoliVertex";
 import { ChatResponseEdge } from "../edges/ChatResponseEdge";
 import { CannoliGroup } from "./CannoliGroup";
 import { FloatingNode } from "../FloatingNode";
+
+// Caller-owned legacy schemas remain supported without loading a v3 parser.
+type ConfigSchema = ZodSchema | LegacyZodSchema;
 
 export type VariableValue = {
   name: string;
@@ -1098,11 +1102,17 @@ export class CannoliNode extends CannoliVertex {
   private updateConfigWithValue(
     runConfig: Record<string, unknown>,
     content: string | Record<string, string> | null,
-    schema: ZodSchema,
+    schema: ConfigSchema,
     setting?: string | null,
   ): void {
-    // Ensure the schema is a ZodObject to access its shape
-    if (!(schema instanceof z.ZodObject)) {
+    // Schema instances supplied by extensions can belong to either Zod major.
+    const legacyObject =
+      typeof schema?.parse === "function" &&
+      typeof schema._def === "object" &&
+      schema._def !== null &&
+      "typeName" in schema._def &&
+      schema._def.typeName === "ZodObject";
+    if (!(schema instanceof z.ZodObject) && !legacyObject) {
       this.error("Provided schema is not a ZodObject.");
       return;
     }
@@ -1122,8 +1132,19 @@ export class CannoliNode extends CannoliVertex {
       const parsedConfig = schema.parse(runConfig);
       Object.assign(runConfig, parsedConfig); // Update runConfig with the transformed values
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        this.error(`Error setting config: ${error.errors[0].message}`);
+      const issues =
+        error instanceof z.ZodError
+          ? error.issues
+          : error instanceof Error &&
+              error.name === "ZodError" &&
+              "issues" in error &&
+              Array.isArray(error.issues)
+            ? error.issues
+            : undefined;
+      if (issues) {
+        this.error(
+          `Error setting config: ${issues[0]?.message ?? "Invalid configuration"}`,
+        );
       } else {
         this.error(`Error setting config: ${error}`);
       }
@@ -1133,7 +1154,7 @@ export class CannoliNode extends CannoliVertex {
   private processSingleEdge(
     runConfig: Record<string, unknown>,
     edgeObject: CannoliEdge,
-    schema: ZodSchema,
+    schema: ConfigSchema,
   ): void {
     if (
       typeof edgeObject.content === "string" ||
@@ -1153,7 +1174,7 @@ export class CannoliNode extends CannoliVertex {
   private processEdges(
     runConfig: Record<string, unknown>,
     edges: CannoliEdge[],
-    schema: ZodSchema,
+    schema: ConfigSchema,
   ): void {
     for (const edgeObject of edges) {
       if (!(edgeObject instanceof CannoliEdge)) {
@@ -1167,7 +1188,7 @@ export class CannoliNode extends CannoliVertex {
 
   private processGroups(
     runConfig: Record<string, unknown>,
-    schema: ZodSchema,
+    schema: ConfigSchema,
   ): void {
     for (let i = this.groups.length - 1; i >= 0; i--) {
       const group = this.graph[this.groups[i]];
@@ -1182,7 +1203,7 @@ export class CannoliNode extends CannoliVertex {
 
   private processNodes(
     runConfig: Record<string, unknown>,
-    schema: ZodSchema,
+    schema: ConfigSchema,
   ): void {
     const configEdges = this.getIncomingEdges().filter(
       (edge) => edge.type === EdgeType.Config,
@@ -1190,7 +1211,7 @@ export class CannoliNode extends CannoliVertex {
     this.processEdges(runConfig, configEdges, schema);
   }
 
-  getConfig(schema: ZodSchema): Record<string, unknown> {
+  getConfig(schema: ConfigSchema): Record<string, unknown> {
     const runConfig = {
       enableVision: this.run.config?.enableVision ?? true,
     };

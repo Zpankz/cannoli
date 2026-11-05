@@ -12,7 +12,7 @@ import { ChatRole } from "src/run";
 import invariant from "tiny-invariant";
 import { CannoliNode } from "../CannoliNode";
 import { arrayBufferToBase64 } from "src/util/base64";
-import { z } from "zod";
+import { z } from "zod-v4";
 
 export class CallNode extends CannoliNode {
   async getNewMessage(

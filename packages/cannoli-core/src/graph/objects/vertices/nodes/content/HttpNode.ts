@@ -15,7 +15,7 @@ import {
   ResponseTextFetcher,
 } from "src/run";
 import { withSignal } from "src/runtime/controller";
-import { z } from "zod";
+import { z } from "zod-v4";
 import { secretsToRecord } from "src/secrets";
 import { ContentNode } from "../ContentNode";
 import { FloatingNode } from "../../../FloatingNode";

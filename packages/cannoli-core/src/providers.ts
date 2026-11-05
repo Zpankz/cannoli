@@ -64,7 +64,7 @@ export type SupportedProviders =
   | "groq"
   | "azure_openai";
 
-import { z } from "zod";
+import { z } from "zod-v4";
 import invariant from "tiny-invariant";
 import { Runnable } from "@langchain/core/runnables";
 
@@ -80,7 +80,7 @@ import { BaseCallbackHandler } from "node_modules/@langchain/core/dist/callbacks
 export const GenericFunctionCallSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
-  parameters: z.record(z.unknown()),
+  parameters: z.record(z.string(), z.unknown()),
 });
 
 export type GenericFunctionCall = z.infer<typeof GenericFunctionCallSchema>;

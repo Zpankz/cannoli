@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { z } from "zod";
+import { z } from "zod-v4";
 import {
   AllVerifiedCannoliCanvasNodeData,
   VerifiedCannoliCanvasData,
@@ -7,7 +7,8 @@ import {
 } from "./graph";
 
 export const hexColorSchema = z.custom<`#${string}`>((v) => {
-  return /^#[0-9a-fA-F]{6}$/.test(v);
+  // Preserve RegExp.test coercion; native v4 types custom input as unknown.
+  return /^#[0-9a-fA-F]{6}$/.test(v as string);
 });
 
 export type HexColor = z.infer<typeof hexColorSchema>;

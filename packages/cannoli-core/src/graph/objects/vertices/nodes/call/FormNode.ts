@@ -6,7 +6,7 @@ import {
   GenericCompletionParams,
 } from "src/providers";
 import { CallNode } from "../CallNode";
-import { z } from "zod";
+import { z } from "zod-v4";
 import { safeKeyName } from "src/utility";
 
 export class FormNode extends CallNode {
@@ -80,7 +80,7 @@ export class FormNode extends CallNode {
 
     // Parse the fields from the arguments
     const rawFields = formFunctionArgs;
-    const fields = z.record(z.string()).parse(rawFields);
+    const fields = z.record(z.string(), z.string()).parse(rawFields);
 
     for (const edge of this.outgoingEdges) {
       const edgeObject = this.graph[edge];
