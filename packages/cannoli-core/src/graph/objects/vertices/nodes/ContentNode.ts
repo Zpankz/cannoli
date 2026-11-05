@@ -1,4 +1,4 @@
-import { CannoliObject } from "src/graph/CannoliObject";
+import { CannoliObject, type ExecutionPayload } from "src/graph/CannoliObject";
 import {
   ContentNodeType,
   GroupType,
@@ -80,12 +80,12 @@ export class ContentNode extends CannoliNode {
     return content;
   }
 
-  async execute(): Promise<void> {
+  async execute(payload?: ExecutionPayload): Promise<void> {
     this.executing();
     if (this.run.stopTime !== null || this.run.controller.signal.aborted)
       return;
 
-    let content = this.getWriteOrLoggingContent();
+    let content = payload?.content ?? this.getWriteOrLoggingContent();
 
     if (content === null) {
       const variableValues = this.getVariableValues(false);
@@ -106,7 +106,7 @@ export class ContentNode extends CannoliNode {
 
     // A chat-response edge carries one streamed chunk at a time: append it,
     // so the node builds up the reply (and keeps it if the run is stopped).
-    if (this.isChatResponseTarget()) {
+    if (payload?.append ?? this.isChatResponseTarget()) {
       content = this.getContentCheckName() + content;
     }
 
@@ -124,7 +124,14 @@ export class ContentNode extends CannoliNode {
     this.completed();
   }
 
-  dependencyCompleted(dependency: CannoliObject): void {
+  dependencyCompleted(
+    dependency: CannoliObject,
+    payload?: ExecutionPayload,
+  ): void {
+    if (dependency instanceof ChatResponseEdge && payload) {
+      this.queueExecution(payload);
+      return;
+    }
     // If the dependency is a logging edge not crossing out of a forEach group or a chatResponse edge, execute regardless of this node's status
     if (
       (dependency instanceof LoggingEdge &&

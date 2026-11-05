@@ -1,9 +1,15 @@
+import type { ExecutionPayload } from "../../CannoliObject";
 import { GenericCompletionParams } from "src/providers";
 import { CannoliEdge } from "../CannoliEdge";
 import { chatFormatString } from "./ChatConverterEdge";
 
 export class ChatResponseEdge extends CannoliEdge {
   beginningOfStream = true;
+
+  async execute(payload?: ExecutionPayload): Promise<void> {
+    if (payload) this.setContent(payload.content);
+    this.completed(payload);
+  }
 
   load({
     content,
@@ -20,6 +26,7 @@ export class ChatResponseEdge extends CannoliEdge {
     }
 
     if (content && typeof content === "string") {
+      let chunk: string;
       if (!this.beginningOfStream) {
         // If the content is the string "END OF STREAM"
         if (content === "END OF STREAM") {
@@ -28,21 +35,21 @@ export class ChatResponseEdge extends CannoliEdge {
             .replace("{{role}}", "User")
             .replace("{{content}}", "");
 
-          this.setContent("\n\n" + userTemplate);
+          chunk = "\n\n" + userTemplate;
         } else {
-          this.setContent(content);
+          chunk = content;
         }
       } else {
         const assistantTemplate = format
           .replace("{{role}}", "Assistant")
           .replace("{{content}}", content);
 
-        this.setContent("\n\n" + assistantTemplate);
+        chunk = "\n\n" + assistantTemplate;
 
         this.beginningOfStream = false;
       }
 
-      this.startExecution();
+      this.queueExecution({ content: chunk, append: true });
     }
   }
 }

@@ -20,6 +20,7 @@ export class BatchedPersistor implements Persistor {
   private readonly writtenAt = new Map<string, number>();
   private queue: Promise<void> = Promise.resolve();
   private failure?: unknown;
+  private editRevision = 0;
   private started = false;
   private startup: Promise<void> = Promise.resolve();
 
@@ -85,6 +86,7 @@ export class BatchedPersistor implements Persistor {
     edit: PersistorEdit,
     urgent: boolean,
   ): Promise<void> {
+    this.editRevision++;
     this.pending.set(key, structuredClone(edit));
     this.schedule(
       urgent
@@ -210,24 +212,39 @@ export class BatchedPersistor implements Persistor {
 
   async flush(): Promise<void> {
     await this.startup;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = undefined;
-    this.deadline = Infinity;
-    await this.drain(true);
-    while (this.pending.size) {
-      const until = Math.min(
-        ...[...this.pending.keys()].map(
-          (key) => this.paints.get(key)?.until ?? Date.now(),
-        ),
-      );
-      if (Number.isFinite(until) && until > Date.now()) {
-        await new Promise((resolve) => setTimeout(resolve, until - Date.now()));
-      }
+    let unsettled: boolean;
+    do {
       if (this.timer) clearTimeout(this.timer);
       this.timer = undefined;
       this.deadline = Infinity;
       await this.drain(true);
-    }
-    await this.target.flush?.();
+      while (this.pending.size) {
+        const until = Math.min(
+          ...[...this.pending.keys()].map(
+            (key) => this.paints.get(key)?.until ?? Date.now(),
+          ),
+        );
+        if (Number.isFinite(until) && until > Date.now()) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, until - Date.now()),
+          );
+        }
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = undefined;
+        this.deadline = Infinity;
+        await this.drain(true);
+      }
+      const drainedRevision = this.editRevision;
+      await this.target.flush?.();
+      // Target callbacks may enqueue more edits or a timer drain during flush.
+      // Each caller owns its barrier: sharing promises would deadlock a target
+      // callback that awaits a nested flush and could admit late edits too early.
+      await this.queue;
+      unsettled =
+        this.pending.size > 0 || drainedRevision !== this.editRevision;
+    } while (unsettled);
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+    this.deadline = Infinity;
   }
 }

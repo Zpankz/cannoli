@@ -756,6 +756,8 @@ export class Run {
     this.begin();
     if (this.stopTime !== null) return;
     this.stopTime = Date.now();
+    for (const object of Object.values(this.graph))
+      object.clearExecutionPayloads();
     // Sub-cannolis share the parent's controller; don't keep finished ones alive.
     this.controller.signal.removeEventListener("abort", this.onAbort);
     // Cancel this run's calls without aborting a controller shared by its parent.
