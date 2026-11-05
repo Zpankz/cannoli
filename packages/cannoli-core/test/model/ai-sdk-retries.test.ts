@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { AiSdkModelPort } from "../../src/model/ai-sdk/adapter";
+import {
+  AiSdkModelPort,
+  type AiSdkModelPortOptions,
+} from "../../src/model/ai-sdk/adapter";
 import type { GenerateRequest } from "../../src/model/types";
 import { chatCompletion, fakeFetch, jsonResponse } from "../helpers/fakeFetch";
 
@@ -81,9 +84,28 @@ describe("AI SDK retry authority", () => {
     ).rejects.toThrow();
     expect(requests).toHaveLength(1);
   }, 20000);
+  for (const method of ["generate", "stream"] as const) {
+    it(`${method} snapshots the validated retry budget at construction`, async () => {
+      const { fetch, requests } = fakeFetch(() => retryable(503));
+      const options = { providers, fetch, maxRetries: 0 };
+      const port = new AiSdkModelPort(options);
+      options.maxRetries = 2;
+      if (method === "generate")
+        await expect(port.generate(request())).rejects.toThrow();
+      else {
+        const events = [];
+        for await (const event of port.stream(request())) events.push(event);
+        expect(events.filter((event) => event.type === "error")).toHaveLength(
+          1,
+        );
+      }
+      expect(requests).toHaveLength(1);
+    }, 20000);
+  }
   it("rejects invalid retry budgets before any request", () => {
     const { fetch, requests } = fakeFetch(() => retryable(503));
     for (const maxRetries of [
+      null,
       -1,
       0.5,
       NaN,
@@ -91,7 +113,12 @@ describe("AI SDK retry authority", () => {
       Number.MAX_SAFE_INTEGER + 1,
     ])
       expect(
-        () => new AiSdkModelPort({ providers, fetch, maxRetries }),
+        () =>
+          new AiSdkModelPort({
+            providers,
+            fetch,
+            maxRetries,
+          } as AiSdkModelPortOptions),
       ).toThrow("maxRetries");
     expect(requests).toHaveLength(0);
   });
