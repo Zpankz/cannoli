@@ -20,7 +20,7 @@ export class BatchedPersistor implements Persistor {
   private readonly writtenAt = new Map<string, number>();
   private queue: Promise<void> = Promise.resolve();
   private failure?: unknown;
-  private flushing?: Promise<void>;
+  private editRevision = 0;
   private started = false;
   private startup: Promise<void> = Promise.resolve();
 
@@ -86,6 +86,7 @@ export class BatchedPersistor implements Persistor {
     edit: PersistorEdit,
     urgent: boolean,
   ): Promise<void> {
+    this.editRevision++;
     this.pending.set(key, structuredClone(edit));
     this.schedule(
       urgent
@@ -209,13 +210,7 @@ export class BatchedPersistor implements Persistor {
     }
   }
 
-  flush(): Promise<void> {
-    return (this.flushing ??= this.flushAll().finally(() => {
-      this.flushing = undefined;
-    }));
-  }
-
-  private async flushAll(): Promise<void> {
+  async flush(): Promise<void> {
     await this.startup;
     let unsettled: boolean;
     do {
@@ -239,12 +234,14 @@ export class BatchedPersistor implements Persistor {
         this.deadline = Infinity;
         await this.drain(true);
       }
-      const drained = this.queue;
+      const drainedRevision = this.editRevision;
       await this.target.flush?.();
       // Target callbacks may enqueue more edits or a timer drain during flush.
-      // Join that work before declaring this barrier complete.
+      // Each caller owns its barrier: sharing promises would deadlock a target
+      // callback that awaits a nested flush and could admit late edits too early.
       await this.queue;
-      unsettled = this.pending.size > 0 || drained !== this.queue;
+      unsettled =
+        this.pending.size > 0 || drainedRevision !== this.editRevision;
     } while (unsettled);
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
