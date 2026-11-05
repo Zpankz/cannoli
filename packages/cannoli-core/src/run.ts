@@ -1,3 +1,8 @@
+import {
+  assertCanvasResourceLimits,
+  resolveCanvasResourceLimits,
+  type CanvasResourceLimits,
+} from "./canvasLimits";
 import type { ModelFetch } from "./model/fetch";
 import pLimit from "p-limit";
 import {
@@ -225,6 +230,8 @@ async function* releaseWhenDone<T>(
 }
 
 export interface RunArgs {
+  /** Finite canvas admission limits; inherited by child runs. Overages throw CanvasResourceError. */
+  resourceLimits?: Partial<CanvasResourceLimits>;
   /** Subscribe before start(). Events carry redacted prompts and output. */
   events?: RunEventBus;
   canvasPath?: string;
@@ -262,6 +269,7 @@ export interface RunArgs {
 }
 
 export class Run {
+  readonly resourceLimits: Readonly<CanvasResourceLimits>;
   readonly events: RunEventBus;
   private readonly canvasPath: string;
   /** Stable FNV-1a canvas fingerprint, not a cryptographic integrity check. */
@@ -323,30 +331,37 @@ export class Run {
 
   forEachTracker: Map<string, number> = new Map();
 
-  constructor({
-    cannoli,
-    isMock,
-    onFinish,
-    persistor,
-    fileManager,
-    llmConfigs,
-    fetcher,
-    actions,
-    httpTemplates,
-    replacers,
-    config,
-    secrets,
-    args,
-    runName,
-    resume,
-    cannoliServer,
-    seed,
-    controller,
-    providerEngine,
-    modelFetch,
-    events,
-    canvasPath,
-  }: RunArgs) {
+  constructor(options: RunArgs) {
+    this.resourceLimits = resolveCanvasResourceLimits(options.resourceLimits);
+    let cannoli = options.cannoli;
+    assertCanvasResourceLimits(cannoli, this.resourceLimits);
+    // Only admitted JSON data reaches copying/hash/parser. This also removes
+    // non-enumerable fields that JSON would omit but a schema could otherwise read.
+    const canvasJSON = JSON.stringify(cannoli);
+    cannoli = canvasJSON === undefined ? undefined : JSON.parse(canvasJSON);
+    const {
+      isMock,
+      onFinish,
+      persistor,
+      fileManager,
+      llmConfigs,
+      fetcher,
+      actions,
+      httpTemplates,
+      replacers,
+      config,
+      secrets,
+      args,
+      runName,
+      resume,
+      cannoliServer,
+      seed,
+      controller,
+      providerEngine,
+      modelFetch,
+      events,
+      canvasPath,
+    } = options;
     this.onFinish = onFinish ?? ((stoppage: Stoppage) => {});
     this.events = events ?? new RunEventBus();
     this.canvasPath = canvasPath ?? "";
@@ -488,6 +503,7 @@ export class Run {
       scIsMock: boolean,
     ) => {
       return resultsRun({
+        resourceLimits: this.resourceLimits,
         cannoli,
         llmConfigs,
         args: {
