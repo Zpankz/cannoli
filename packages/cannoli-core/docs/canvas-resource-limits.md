@@ -4,7 +4,9 @@
 `CanvasResourceError` is thrown synchronously by `new Run`/`run` (and becomes a
 rejection in `resultsRun`) before hashing, JSON copying, schema parsing, secret
 resolution, provider construction or persistor wrapping. Resource errors do not
-invoke `onFinish`. Bounded schema-invalid JSON retains the existing error/stoppage
+invoke `onFinish`. Constructor and wrapper admission read only the canvas and resource
+policy before optional host argument properties; the public wrappers recheck admission
+without caching mutable input across host processing. Bounded schema-invalid JSON retains the existing error/stoppage
 path. Options are copied and frozen; changing the caller's bag cannot affect a run
 or its explicit subcannoli runs. Each child inherits the same policy, independently;
 this is not a cumulative execution, graph expansion or concurrency budget.

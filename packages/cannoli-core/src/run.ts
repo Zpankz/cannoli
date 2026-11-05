@@ -331,37 +331,37 @@ export class Run {
 
   forEachTracker: Map<string, number> = new Map();
 
-  constructor({
-    cannoli,
-    isMock,
-    onFinish,
-    persistor,
-    fileManager,
-    llmConfigs,
-    fetcher,
-    actions,
-    httpTemplates,
-    replacers,
-    config,
-    secrets,
-    args,
-    runName,
-    resume,
-    cannoliServer,
-    seed,
-    controller,
-    providerEngine,
-    modelFetch,
-    events,
-    canvasPath,
-    resourceLimits,
-  }: RunArgs) {
-    this.resourceLimits = resolveCanvasResourceLimits(resourceLimits);
+  constructor(options: RunArgs) {
+    this.resourceLimits = resolveCanvasResourceLimits(options.resourceLimits);
+    let cannoli = options.cannoli;
     assertCanvasResourceLimits(cannoli, this.resourceLimits);
     // Only admitted JSON data reaches copying/hash/parser. This also removes
     // non-enumerable fields that JSON would omit but a schema could otherwise read.
     const canvasJSON = JSON.stringify(cannoli);
     cannoli = canvasJSON === undefined ? undefined : JSON.parse(canvasJSON);
+    const {
+      isMock,
+      onFinish,
+      persistor,
+      fileManager,
+      llmConfigs,
+      fetcher,
+      actions,
+      httpTemplates,
+      replacers,
+      config,
+      secrets,
+      args,
+      runName,
+      resume,
+      cannoliServer,
+      seed,
+      controller,
+      providerEngine,
+      modelFetch,
+      events,
+      canvasPath,
+    } = options;
     this.onFinish = onFinish ?? ((stoppage: Stoppage) => {});
     this.events = events ?? new RunEventBus();
     this.canvasPath = canvasPath ?? "";
