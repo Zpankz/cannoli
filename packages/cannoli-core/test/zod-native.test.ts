@@ -3,6 +3,7 @@ import { tool } from "@langchain/core/tools";
 import type { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod-v4";
+import { z as legacyZod } from "zod";
 import { convertToOpenAIFunction } from "@langchain/core/utils/function_calling";
 import { choiceTool, formTool, noteSelectTool } from "../src/fn_calling";
 import { GenericModelConfigSchema, LLMProvider } from "../src/providers";
@@ -328,3 +329,60 @@ it("preserves legacy Zod tool declarations on the public Gemini client", () => {
     },
   ]);
 });
+
+// Preserve the existing public schema input contract for downstream extensions.
+it.each([
+  {
+    name: "legacy",
+    schema: legacyZod.object({
+      temperature: legacyZod.coerce.number().optional(),
+    }),
+  },
+  {
+    name: "native",
+    schema: z.object({ temperature: z.coerce.number().optional() }),
+  },
+])(
+  "accepts caller-owned $name config schemas and first-issue diagnostics",
+  ({ schema }) => {
+    const box = { x: 0, y: 0, width: 200, height: 100 };
+    const run = new Run({
+      isMock: true,
+      cannoli: {
+        nodes: [
+          { id: "config", type: "text", text: "0.5", color: "6", ...box },
+          { id: "call", type: "text", text: "hello", ...box },
+        ],
+        edges: [
+          {
+            id: "edge",
+            fromNode: "config",
+            fromSide: "right",
+            toNode: "call",
+            toSide: "left",
+            color: "2",
+            label: "temperature",
+          },
+        ],
+      },
+    });
+    const node = run.graph.call;
+    const edge = run.graph.edge;
+    if (!(node instanceof CannoliNode) || !(edge instanceof CannoliEdge))
+      throw new Error("fixture did not compile");
+    const error = vi.spyOn(node, "error").mockImplementation(() => {});
+    edge.content = "0.5";
+    expect(node.getConfig(schema)).toEqual({
+      enableVision: true,
+      temperature: 0.5,
+    });
+    expect(error).not.toHaveBeenCalled();
+    edge.content = "invalid";
+    node.getConfig(schema);
+    const result = schema.safeParse({ temperature: "invalid" });
+    if (result.success) throw new Error("expected invalid config");
+    expect(error).toHaveBeenCalledExactlyOnceWith(
+      `Error setting config: ${result.error.issues[0].message}`,
+    );
+  },
+);
