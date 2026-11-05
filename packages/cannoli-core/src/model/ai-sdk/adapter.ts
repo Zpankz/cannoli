@@ -43,6 +43,8 @@ export interface AiSdkModelPortOptions {
   fallback?: ModelPort;
   /** Model steps per call; the default 1 returns tool calls to the caller. */
   maxSteps?: number;
+  /** Automatic SDK retries; default 0. Opting in can repeat a dispatched request. */
+  maxRetries?: number;
 }
 
 type SdkProviderOptions = Record<string, Record<string, never>>;
@@ -337,7 +339,15 @@ function finishReasonOf(reason: FinishReason | undefined): string {
 }
 
 export class AiSdkModelPort implements ModelPort {
-  constructor(private readonly options: AiSdkModelPortOptions) {}
+  private readonly maxRetries: number;
+
+  constructor(private readonly options: AiSdkModelPortOptions) {
+    const maxRetries =
+      options.maxRetries === undefined ? 0 : options.maxRetries;
+    if (!Number.isSafeInteger(maxRetries) || maxRetries < 0)
+      throw new RangeError("maxRetries must be a non-negative safe integer");
+    this.maxRetries = maxRetries;
+  }
 
   private get fetch(): ModelFetch {
     return this.options.fetch ?? globalThis.fetch;
@@ -423,6 +433,7 @@ export class AiSdkModelPort implements ModelPort {
         Object.entries(settings).filter(([, v]) => v !== undefined),
       ),
       abortSignal: req.signal,
+      maxRetries: this.maxRetries,
       stopWhen: isStepCount(this.options.maxSteps ?? 1),
     };
   }
