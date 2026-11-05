@@ -431,7 +431,7 @@ export class Run {
       return;
     }
 
-    // Bounds concurrent model calls, streaming included (DESIGN §11.5).
+    // Bounds concurrent model calls, streaming included.
     const limit = this.config?.pLimit ?? 1000;
     this.llmLimit = pLimit(
       typeof limit === "number" && Number.isInteger(limit) && limit > 0
@@ -1335,7 +1335,7 @@ export class Run {
             if (signal.aborted) throw signal.reason;
             return result;
           }
-          // Only the LangChain port runs the goal agent (until P3.6).
+          // Only the LangChain port runs the goal agent.
           const agent = canRunGoalAgent(model) ? model : this.langchainModel;
           if (!agent) {
             throw new Error(
@@ -1398,7 +1398,7 @@ export class Run {
       return "Mock response";
     }
     // A streaming call holds its limiter slot until the stream ends, not just
-    // until the stream object is returned (DESIGN §11.5). A stop frees it at
+    // until the stream object is returned. A stop frees it at
     // once: the provider's stream may not notice the abort until its next chunk.
     const acquired = await this.acquireLlmSlot();
     let tokens: TokenUsage | undefined;

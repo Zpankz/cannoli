@@ -1,5 +1,5 @@
 import type { ModelFetch } from "../fetch";
-// AiSdkModelPort: ModelPort over the Vercel AI SDK v7 (DESIGN §4.2, P1.3).
+// AiSdkModelPort: ModelPort over the Vercel AI SDK v7.
 // Structured output (`req.output`, Output.choice) comes in P1.4; until then
 // legacy forced function calls go through a single forced tool.
 import {

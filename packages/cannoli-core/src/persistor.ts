@@ -26,7 +26,7 @@ export const canvasColorSchema = z.union([
 export type CanvasColor = z.infer<typeof canvasColorSchema>;
 
 /**
- * Engine-written cache on a node or edge (DESIGN §3.5). Never needed for semantics:
+ * Engine-written cache on a node or edge. Never needed for semantics:
  * node text stays authoritative, and the field is rebuilt on the next run. No prompts,
  * outputs or secrets go here. Unknown sub-keys are kept so newer engines can add fields.
  */
