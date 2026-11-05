@@ -6,7 +6,7 @@ import {
   GenericCompletionParams,
 } from "src/providers";
 import { CallNode } from "../CallNode";
-import { z } from "zod";
+import { z } from "zod-v4";
 
 export class ChooseNode extends CallNode {
   getFunctions(messages: GenericCompletionResponse[]): GenericFunctionCall[] {

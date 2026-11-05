@@ -6,7 +6,7 @@ import {
   GenericCompletionParams,
 } from "src/providers";
 import { CallNode } from "../CallNode";
-import { z } from "zod";
+import { z } from "zod-v4";
 import { safeKeyName } from "src/utility";
 
 export class FormNode extends CallNode {

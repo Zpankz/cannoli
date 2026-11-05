@@ -64,7 +64,7 @@ export type SupportedProviders =
   | "groq"
   | "azure_openai";
 
-import { z } from "zod";
+import { z } from "zod-v4";
 import invariant from "tiny-invariant";
 import { Runnable } from "@langchain/core/runnables";
 

@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { safeKeyName } from "src/utility";
-import { z } from "zod";
+import { z } from "zod-v4";
 
 // Legacy LangChain converts Zod v3 only. Keep its JSON Schema boundary, then
 // parse with native v4 so validation and unknown-key stripping stay intact.

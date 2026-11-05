@@ -18,7 +18,7 @@ import {
   GenericCompletionParams,
   GenericCompletionResponse,
 } from "src/providers";
-import { ZodSchema, z } from "zod";
+import { ZodSchema, z } from "zod-v4";
 import { CannoliEdge } from "../CannoliEdge";
 import { CannoliVertex } from "../CannoliVertex";
 import { ChatResponseEdge } from "../edges/ChatResponseEdge";

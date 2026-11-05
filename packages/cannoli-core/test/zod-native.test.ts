@@ -1,8 +1,11 @@
+import { createRequire } from "node:module";
+import { tool } from "@langchain/core/tools";
+import type { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { describe, expect, it, vi } from "vitest";
-import { z } from "zod";
+import { z } from "zod-v4";
 import { convertToOpenAIFunction } from "@langchain/core/utils/function_calling";
 import { choiceTool, formTool, noteSelectTool } from "../src/fn_calling";
-import { GenericModelConfigSchema } from "../src/providers";
+import { GenericModelConfigSchema, LLMProvider } from "../src/providers";
 import { Run } from "../src/run";
 import { runCanvas } from "./helpers/run";
 import { CannoliNode } from "../src/graph/objects/vertices/CannoliNode";
@@ -287,4 +290,41 @@ describe("native parsing of model function outputs", () => {
       }
     },
   );
+});
+
+// Downstream callers can bind their own v3 tools to the public legacy client.
+// Resolve the same v3 peer as LangChain instead of passing a native-v4 schema.
+it("preserves legacy Zod tool declarations on the public Gemini client", () => {
+  const require = createRequire(import.meta.url);
+  const legacyRequire = createRequire(require.resolve("@langchain/core/tools"));
+  const { z: legacyZod } = legacyRequire("zod") as typeof import("zod");
+  const legacyTool = tool(({ choice }) => choice, {
+    name: "legacy_choice",
+    description: "Pick a legacy option",
+    schema: legacyZod.object({ choice: legacyZod.enum(["a", "b"]) }),
+  });
+  const provider = new LLMProvider({
+    configs: [
+      { provider: "gemini", apiKey: "offline-test", model: "gemini-1.5-flash" },
+    ],
+  });
+  const client = provider.getChatClient() as ChatGoogleGenerativeAI;
+  const bound = client.bindTools([legacyTool]) as unknown as {
+    kwargs: Parameters<typeof client.invocationParams>[0];
+  };
+  expect(client.invocationParams(bound.kwargs).tools).toEqual([
+    {
+      functionDeclarations: [
+        {
+          name: "legacy_choice",
+          description: "Pick a legacy option",
+          parameters: {
+            type: "object",
+            properties: { choice: { type: "string", enum: ["a", "b"] } },
+            required: ["choice"],
+          },
+        },
+      ],
+    },
+  ]);
 });

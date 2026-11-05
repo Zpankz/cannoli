@@ -1,5 +1,5 @@
 import { EdgeType } from "src/graph";
-import { z } from "zod";
+import { z } from "zod-v4";
 import { ContentNode } from "../ContentNode";
 import { defaultHttpConfig, HttpConfig, HTTPConfigSchema } from "./HttpNode";
 
