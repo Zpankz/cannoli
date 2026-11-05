@@ -57,3 +57,9 @@ export {
   toModelRef,
 } from "./model/legacy";
 export type { ModelFetch } from "./model/fetch";
+
+export {
+  DEFAULT_CANVAS_RESOURCE_LIMITS,
+  CanvasResourceError,
+  type CanvasResourceLimits,
+} from "./canvasLimits";
