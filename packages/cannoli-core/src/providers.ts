@@ -80,7 +80,7 @@ import { BaseCallbackHandler } from "node_modules/@langchain/core/dist/callbacks
 export const GenericFunctionCallSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
-  parameters: z.record(z.unknown()),
+  parameters: z.record(z.string(), z.unknown()),
 });
 
 export type GenericFunctionCall = z.infer<typeof GenericFunctionCallSchema>;

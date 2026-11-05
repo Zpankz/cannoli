@@ -1123,7 +1123,9 @@ export class CannoliNode extends CannoliVertex {
       Object.assign(runConfig, parsedConfig); // Update runConfig with the transformed values
     } catch (error) {
       if (error instanceof z.ZodError) {
-        this.error(`Error setting config: ${error.errors[0].message}`);
+        this.error(
+          `Error setting config: ${error.issues[0]?.message ?? "Invalid configuration"}`,
+        );
       } else {
         this.error(`Error setting config: ${error}`);
       }
